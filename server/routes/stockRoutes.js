@@ -490,4 +490,52 @@ router.post('/get-last-locations', requireAuth, (req, res) => {
     });
 });
 
+// Route to fetch stock sheet data
+router.get('/stock-sheet', requireAuth, (req, res) => {
+    const stockSheetQuery = `
+        SELECT 
+            d.id,
+            d.item_name,
+            d.batch_number,
+            d.expiry_date,
+            d.quantity AS standard_stock,
+            d.loose_quantity AS loose_stock,
+            d.packing,
+            d.mrp,
+            d.rate,
+            m.vendor_name
+        FROM import_stock_detail d
+        LEFT JOIN import_stock_master m ON d.master_id = m.id
+        WHERE d.quantity > 0 OR d.loose_quantity > 0
+        ORDER BY d.item_name ASC, d.expiry_date ASC
+    `;
+
+    db.query(stockSheetQuery, (err, results) => {
+        if (err) {
+            console.error('Error fetching stock sheet data:', err);
+            return res.status(500).json({ success: false, error: 'Database error fetching stock sheet.' });
+        }
+
+        // Process results to calculate value and format dates
+        const processedResults = results.map(item => {
+            const packing = parseInt(item.packing) || 1;
+            const standardValue = item.quantity * item.rate;
+            // Loose stock value is loose_quantity * (rate / packing)
+            const looseValue = item.loose_quantity * (item.rate / packing);
+            const totalValue = standardValue + looseValue;
+
+            return {
+                ...item,
+                value: totalValue.toFixed(2), // Format as string with 2 decimals
+                expiry_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split('T')[0] : 'N/A'
+            };
+        });
+
+        res.json({
+            success: true,
+            data: processedResults
+        });
+    });
+});
+
 module.exports = router;

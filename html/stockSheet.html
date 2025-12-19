@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Balance Sheet - KiranCareWellness</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#00712D',      /* Dark Green */
+                        'secondary': '#D5ED9F',    /* Light Pastel Green/Yellow */
+                        'tertiary': '#FFFBE6',     /* Very Light Cream/Yellow (Background) */
+                        'quarterly': '#FF9100',    /* Bright Orange (Accent) */
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="/css/stockSheet.css">
+</head>
+<body class="bg-tertiary font-sans min-h-screen p-4 sm:p-6 lg:p-8">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-tertiary bg-opacity-80 flex flex-col items-center justify-center z-50">
+        <div class="spinner mb-4"></div>
+        <p class="text-primary font-semibold text-lg">Loading Stock Data...</p>
+    </div>
+
+    <div class="w-full max-w-7xl mx-auto bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-2xl space-y-6">
+        
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row items-center justify-between border-b pb-4 mb-4">
+            <div class="flex items-center">
+                 <a href="/index.html" class="mr-4 text-gray-500 hover:text-primary transition">
+                    <i class="fas fa-arrow-left text-xl"></i>
+                </a>
+                <h1 class="text-2xl sm:text-3xl font-bold text-primary">Stock Balance Sheet</h1>
+            </div>
+            <div class="mt-4 sm:mt-0 flex gap-2">
+                <button id="refreshBtn" class="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-lg font-semibold transition">
+                    <i class="fas fa-sync-alt mr-2"></i> Refresh
+                </button>
+                <button id="downloadCsvBtn" class="bg-quarterly text-white hover:bg-orange-600 px-4 py-2 rounded-lg font-semibold transition">
+                    <i class="fas fa-file-csv mr-2"></i> Download CSV
+                </button>
+            </div>
+        </header>
+
+        <!-- Search & Filter -->
+        <div class="flex flex-col sm:flex-row gap-4 mb-6">
+            <div class="relative flex-grow">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                    <i class="fas fa-search text-gray-400"></i>
+                </span>
+                <input type="text" id="searchInput" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary" placeholder="Search by Item Name, Batch, or Vendor...">
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <label class="flex items-center space-x-2 text-sm text-gray-600">
+                    <input type="checkbox" id="hideExpired" class="rounded text-primary focus:ring-primary">
+                    <span>Hide Expired</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Stock Table -->
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table class="w-full text-sm text-left text-gray-600">
+                <thead class="bg-gray-50 text-gray-700 uppercase font-semibold">
+                    <tr>
+                        <th class="px-4 py-3 cursor-pointer sortable" data-sort="item_name">Item Name <i class="fas fa-sort text-xs ml-1"></i></th>
+                        <th class="px-4 py-3 cursor-pointer sortable" data-sort="batch_number">Batch No <i class="fas fa-sort text-xs ml-1"></i></th>
+                        <th class="px-4 py-3 cursor-pointer sortable" data-sort="expiry_date">Expiry <i class="fas fa-sort text-xs ml-1"></i></th>
+                        <th class="px-4 py-3 text-right cursor-pointer sortable" data-sort="quantity">Std Stock <i class="fas fa-sort text-xs ml-1"></i></th>
+                        <th class="px-4 py-3 text-right cursor-pointer sortable" data-sort="loose_quantity">Loose Stock <i class="fas fa-sort text-xs ml-1"></i></th>
+                        <th class="px-4 py-3 text-right">Pack Size</th>
+                        <th class="px-4 py-3 text-right cursor-pointer sortable" data-sort="mrp">MRP <i class="fas fa-sort text-xs ml-1"></i></th>
+                         <th class="px-4 py-3 text-right cursor-pointer sortable" data-sort="rate">Rate <i class="fas fa-sort text-xs ml-1"></i></th>
+                        <th class="px-4 py-3 text-right cursor-pointer sortable" data-sort="value">Est. Value <i class="fas fa-sort text-xs ml-1"></i></th>
+                    </tr>
+                </thead>
+                <tbody id="stockTableBody" class="divide-y divide-gray-200">
+                    <!-- Rows will be populated by JS -->
+                </tbody>
+                <tfoot class="bg-gray-50 font-semibold text-gray-800">
+                    <tr>
+                        <td colspan="3" class="px-4 py-3 text-right">Total:</td>
+                        <td id="totalStdStock" class="px-4 py-3 text-right">-</td>
+                        <td id="totalLooseStock" class="px-4 py-3 text-right">-</td>
+                        <td colspan="3"></td>
+                        <td id="totalValue" class="px-4 py-3 text-right">-</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        <div id="noResults" class="hidden text-center py-8 text-gray-500">
+            No stock items found matching your criteria.
+        </div>
+
+    </div>
+
+    <script src="/js/stockSheet.js"></script>
+</body>
+</html>
