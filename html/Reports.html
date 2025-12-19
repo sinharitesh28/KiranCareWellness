@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics & Reports - KiranCareWellness</title>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#00712D',
+                        'secondary': '#D5ED9F',
+                        'tertiary': '#FFFBE6',
+                        'quarterly': '#FF9100',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-tertiary font-sans min-h-screen p-4 sm:p-6 lg:p-8">
+
+    <div class="w-full max-w-7xl mx-auto space-y-8">
+        
+        <!-- Header -->
+        <header class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 flex flex-col sm:flex-row items-center justify-between">
+            <div class="flex items-center mb-4 sm:mb-0">
+                <a href="/index.html" class="mr-4 text-gray-500 hover:text-primary transition">
+                    <i class="fas fa-arrow-left text-xl"></i>
+                </a>
+                <img src="/img/KiranCareWellnessLogo.svg" onerror="this.onerror=null; this.src='https://placehold.co/40x40/00712D/ffffff?text=KR';" alt="Logo" class="h-10 w-auto mr-4">
+                <h1 class="text-2xl sm:text-3xl font-bold text-primary">Analytics & Reports</h1>
+            </div>
+            
+            <!-- Global Date Filter -->
+            <div class="flex flex-wrap items-center gap-3">
+                <select id="dateRange" class="p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary text-sm">
+                    <option value="15days">Last 15 Days</option>
+                    <option value="1month">Last 1 Month</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+                
+                <div id="customDateInputs" class="hidden flex items-center gap-2">
+                    <input type="date" id="startDate" class="p-2 border border-gray-300 rounded-lg text-sm">
+                    <span class="text-gray-500">-</span>
+                    <input type="date" id="endDate" class="p-2 border border-gray-300 rounded-lg text-sm">
+                </div>
+                
+                <button id="applyFilters" class="bg-primary text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition">
+                    Apply
+                </button>
+            </div>
+        </header>
+
+        <!-- 1. Selling Reports Section -->
+        <section class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-chart-line mr-2 text-quarterly"></i> Selling Reports
+                </h2>
+                <button onclick="exportTableToCSV('salesTable', 'sales_report')" class="text-primary hover:text-primary/80 font-medium text-sm">
+                    <i class="fas fa-file-csv mr-1"></i> Export CSV
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Sales Graph -->
+                <div class="h-80">
+                    <canvas id="salesChart"></canvas>
+                </div>
+                
+                <!-- Top Selling Items Table -->
+                <div class="overflow-y-auto h-80 border rounded-lg">
+                    <table class="w-full text-sm text-left text-gray-600" id="salesTable">
+                        <thead class="bg-gray-50 text-gray-700 uppercase font-semibold sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2">Item Name</th>
+                                <th class="px-4 py-2 text-right">Qty Sold</th>
+                                <th class="px-4 py-2 text-right">Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesTableBody" class="divide-y divide-gray-200">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Stock Status Section -->
+        <section class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
+             <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-boxes mr-2 text-quarterly"></i> Stock Status
+                </h2>
+                <button onclick="exportTableToCSV('distributorTable', 'stock_distributor_report')" class="text-primary hover:text-primary/80 font-medium text-sm">
+                    <i class="fas fa-file-csv mr-1"></i> Export CSV
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Active vs Inactive Pie Chart -->
+                <div class="col-span-1 h-64 flex flex-col items-center">
+                    <h3 class="text-sm font-semibold text-gray-500 mb-2">Active vs Inactive Items</h3>
+                    <canvas id="stockStatusChart"></canvas>
+                </div>
+
+                <!-- Stock by Distributor Bar Chart -->
+                <div class="col-span-2 h-80">
+                    <h3 class="text-sm font-semibold text-gray-500 mb-2">Stock Value by Distributor</h3>
+                    <canvas id="distributorChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Hidden table for Distributor CSV export -->
+            <div class="hidden">
+                <table id="distributorTable">
+                    <thead>
+                        <tr>
+                            <th>Distributor Name</th>
+                            <th>Total Items</th>
+                            <th>Stock Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="distributorTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 3. ABC Analysis Section -->
+        <section class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-sort-amount-up mr-2 text-quarterly"></i> ABC Analysis
+                </h2>
+                <button onclick="exportTableToCSV('abcTable', 'abc_analysis_report')" class="text-primary hover:text-primary/80 font-medium text-sm">
+                    <i class="fas fa-file-csv mr-1"></i> Export CSV
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- ABC Summary Chart -->
+                <div class="col-span-1 h-64 flex flex-col items-center">
+                    <h3 class="text-sm font-semibold text-gray-500 mb-2">Item Classification</h3>
+                    <canvas id="abcChart"></canvas>
+                    <div class="mt-4 text-xs text-gray-500 text-center">
+                        <p><span class="font-bold text-green-600">Class A:</span> High Value (Top 70%)</p>
+                        <p><span class="font-bold text-yellow-600">Class B:</span> Medium Value (Next 20%)</p>
+                        <p><span class="font-bold text-red-600">Class C:</span> Low Value (Bottom 10%)</p>
+                    </div>
+                </div>
+
+                <!-- ABC Detailed Table -->
+                <div class="col-span-2 overflow-y-auto h-80 border rounded-lg">
+                    <table class="w-full text-sm text-left text-gray-600" id="abcTable">
+                        <thead class="bg-gray-50 text-gray-700 uppercase font-semibold sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2">Item Name</th>
+                                <th class="px-4 py-2 text-right">Consumption Value</th>
+                                <th class="px-4 py-2 text-center">Class</th>
+                            </tr>
+                        </thead>
+                        <tbody id="abcTableBody" class="divide-y divide-gray-200">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="/js/Reports.js"></script>
+</body>
+</html>

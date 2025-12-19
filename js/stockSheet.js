@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let valB = b[currentSort.column];
 
             // Handle numeric sorting
-            if (['quantity', 'loose_quantity', 'mrp', 'rate', 'value'].includes(currentSort.column)) {
+            if (['standard_stock', 'loose_stock', 'mrp', 'rate', 'value'].includes(currentSort.column)) {
                 valA = parseFloat(valA) || 0;
                 valB = parseFloat(valB) || 0;
             } else {
@@ -146,7 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update icons
             document.querySelectorAll('.sortable i').forEach(icon => icon.className = 'fas fa-sort text-xs ml-1');
             const activeIcon = th.querySelector('i');
-            activeIcon.className = currentSort.direction === 'asc' ? 'fas fa-sort-up text-xs ml-1' : 'fas fa-sort-down text-xs ml-1';
+            if (activeIcon) {
+                activeIcon.className = currentSort.direction === 'asc' ? 'fas fa-sort-up text-xs ml-1' : 'fas fa-sort-down text-xs ml-1';
+            }
 
             renderTable(allStockData);
         });
@@ -156,11 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadCsvBtn.addEventListener('click', () => {
         if (allStockData.length === 0) return;
 
-        // Use currently filtered data logic (but re-run it since we don't store filteredData globally)
-        // Or better, just export what is visible or ALL data? 
-        // Usually export reflects what is on screen or ALL. Let's export ALL currently available (filtered).
-        
-        // Re-calculate filtered data to ensure export matches view
         const searchTerm = searchInput.value.toLowerCase();
         const hideExpired = hideExpiredCheckbox.checked;
         const today = new Date().toISOString().split('T')[0];
@@ -184,4 +181,35 @@ document.addEventListener('DOMContentLoaded', () => {
     function convertToCSV(data) {
         const headers = ['Item Name', 'Batch No', 'Expiry Date', 'Standard Stock', 'Loose Stock', 'Pack Size', 'MRP', 'Rate', 'Total Value', 'Vendor'];
         const rows = data.map(item => [
-            `"${item.item_name.replace(/
+            `"${(item.item_name || '').replace(/"/g, '""')}"`,
+            `"${(item.batch_number || '').replace(/"/g, '""')}"`,
+            item.expiry_date || '',
+            item.standard_stock || 0,
+            item.loose_stock || 0,
+            item.packing || 1,
+            item.mrp || 0,
+            item.rate || 0,
+            item.value || 0,
+            `"${(item.vendor_name || '').replace(/"/g, '""')}"`
+        ]);
+
+        return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    }
+
+    function downloadCSV(content, fileName) {
+        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', fileName);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    // Initial Load
+    fetchStockData();
+});
