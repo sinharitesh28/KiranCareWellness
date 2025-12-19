@@ -1,0 +1,38 @@
+ /* Custom Styles for Input Focus and Hint Messages */
+        .input-style {
+            transition: all 0.2s;
+        }
+        .input-style:focus {
+            border-color: #00712D; /* Primary color focus */
+            box-shadow: 0 0 0 3px rgba(0, 113, 45, 0.2);
+        }
+
+        /* Base Hint Style */
+        .hint {
+            /* Ensures the div is visible and occupies space */
+            min-height: 2.5rem; /* Equivalent to h-10 */
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .hint.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Specific Hint Kinds using the specified palette and standard colors */
+        .hint.error {
+            color: #dc2626; /* Standard Tailwind red-700 */
+            background-color: #fee2e2; /* Standard Tailwind red-100 */
+            border: 1px solid #fca5a5; /* Standard Tailwind red-300 */
+        }
+        .hint.success {
+            color: #047857; /* Standard Tailwind green-700 */
+            background-color: #d1fae5; /* Standard Tailwind green-100 */
+            border: 1px solid #6ee7b7; /* Standard Tailwind green-300 */
+        }
+        .hint.info {
+            color: #1d4ed8; /* Standard Tailwind blue-700 */
+            background-color: #dbeafe; /* Standard Tailwind blue-100 */
+            border: 1px solid #93c5fd; /* Standard Tailwind blue-300 */
+        }

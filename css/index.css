@@ -1,0 +1,25 @@
+/* Custom CSS for KiranCareWellness Dashboard */
+
+/* Define CSS Variables for the Color Palette */
+:root {
+    --color-primary: #00712D;      /* Dark Green */
+    --color-secondary: #D5ED9F;    /* Light Green/Yellow */
+    --color-tertiary: #FFFBE6;     /* Cream/Off-White */
+    --color-quarterly: #FF9100;    /* Orange (Accent) */
+    --shadow-light: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+}
+
+/* Ensure smooth transitions on focus/hover for feature cards */
+.feature-card {
+    /* Base transition for scale and shadow */
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: var(--shadow-light);
+}
+
+/* The greeting element's initial opacity is handled by JS/Tailwind, but this ensures a smooth transition */
+#greeting {
+    transition: opacity 0.7s ease-in-out;
+}
+
+/* Base styles for responsiveness and appearance are handled by Tailwind classes in index.html */
+/* All feature cards use the same base style and rely on Tailwind's group-hover classes for consistent interaction effects. */

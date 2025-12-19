@@ -1,0 +1,96 @@
+/*
+ * Custom CSS for Import Stock / Receive Stock Page
+ */
+
+/* 1. Base Styles & Typography */
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Color Palette Variables (from ImportTemplate.html/css) */
+:root {
+    --color-primary: #00712D;      /* Dark Green */
+    --color-secondary: #D5ED9F;    /* Light Pastel Green/Yellow */
+    --color-tertiary: #FFFBE6;     /* Very Light Cream/Yellow */
+    --color-quarterly: #FF9100;    /* Bright Orange (Accent) */
+}
+
+/* 2. Custom Button Styles */
+.btn-primary-custom {
+    background-color: var(--color-primary);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+}
+
+.btn-primary-custom:hover {
+    background-color: #005A25;
+}
+
+/* Secondary Button (for Reset/Clear): Light Green background, Dark Green text */
+.btn-secondary-custom {
+    background-color: var(--color-secondary);
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+}
+
+.btn-secondary-custom:hover {
+    background-color: #C3E08A;
+}
+
+/* 3. Input & Dropdown Styling */
+input[type="text"], input[type="file"], select {
+    transition: all 0.2s ease-in-out;
+}
+
+input[type="text"]:focus, select:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(0, 113, 45, 0.2);
+}
+
+/* Error Styling */
+.error-border {
+    border-color: #FF5252 !important; /* Red */
+}
+.error-text {
+    color: #FF5252;
+}
+
+/* 4. Item List Specific Styling */
+.item-card {
+    border-bottom: 1px solid #e0e0e0;
+    transition: background-color 0.2s;
+}
+
+.item-card:hover {
+    background-color: #f9f9f9;
+}
+
+/* Loading/Processing Overlay */
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: none; /* Controlled by JS */
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+/* Animation for loading spinner */
+.spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border-left-color: var(--color-primary);
+    animation: spin 1s ease infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

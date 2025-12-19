@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receive Stocks</title>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#00712D',      /* Dark Green */
+                        'secondary': '#D5ED9F',    /* Light Pastel Green/Yellow */
+                        'tertiary': '#FFFBE6',     /* Very Light Cream/Yellow */
+                        'quarterly': '#FF9100',    /* Bright Orange (Accent) */
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/ImportStock.css">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body class="bg-tertiary font-sans min-h-screen p-4 sm:p-8 flex justify-center items-start">
+
+    <!-- Global Message/Modal Container -->
+    <div id="message-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
+            <h3 id="modal-title" class="text-lg font-bold mb-3 text-primary">Notification</h3>
+            <p id="modal-body" class="text-gray-700"></p>
+            <div id="modal-sources" class="mt-4 text-xs text-gray-500 hidden"></div>
+            <button onclick="document.getElementById('message-modal').classList.add('hidden')" class="mt-4 w-full btn-primary-custom py-2 rounded-lg font-semibold transition duration-200">Close</button>
+        </div>
+    </div>
+    
+    <!-- Loading/Processing Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-tertiary bg-opacity-80 flex flex-col items-center justify-center z-50">
+        <div class="spinner mb-4"></div>
+        <p class="text-primary font-semibold text-lg">Processing File...</p>
+        <p class="text-gray-600 text-sm">Please wait, this may take a few moments.</p>
+    </div>
+
+    <div class="w-full max-w-4xl bg-white p-6 sm:p-8 rounded-2xl shadow-xl space-y-8">
+
+        <!-- Header -->
+        <header class="flex items-center justify-center border-b pb-4 mb-4">
+            <img src="/img/KiranCareWellnessLogo.svg" alt="Kiran Care Wellness Logo" class="h-10 w-auto mr-4">
+            <h1 class="text-2xl sm:text-3xl font-bold text-primary text-center">Receive Stocks in KiranCareWellness</h1>
+        </header>
+
+        <!-- STEP 1: Template and File Upload -->
+        <section id="step-1" class="space-y-6">
+            <h2 class="text-xl font-semibold text-gray-800 border-b pb-2">Step 1: Select Template and Upload File</h2>
+            
+            <!-- Template Selection -->
+            <div>
+                <label for="template-select" class="block text-sm font-medium text-gray-700 mb-1">Select Import Template</label>
+                <select id="template-select" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary transition duration-150">
+                    <option value="" disabled selected>-- Select a Template --</option>
+                    <!-- Options populated by JS -->
+                </select>
+                <p id="template-select-error" class="text-red-500 text-sm mt-1 hidden">Please select a template.</p>
+            </div>
+
+            <!-- File Upload -->
+            <div>
+                <label for="import-file" class="block text-sm font-medium text-gray-700 mb-1">Upload File (.xlsx / .xls / .csv)</label>
+                <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
+                    <input type="file" id="import-file" accept=".xlsx,.xls,.csv" class="flex-grow p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary transition duration-150 bg-white">
+                    <button id="process-file-btn" class="btn-primary-custom py-3 px-6 rounded-lg font-semibold disabled:opacity-50 transition duration-200">
+                        <i class="fas fa-upload mr-2"></i> Process File
+                    </button>
+                </div>
+                <p id="file-upload-error" class="text-red-500 text-sm mt-1 hidden"></p>
+            </div>
+            
+            <div id="validation-output" class="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                <p class="font-bold">Validation Error</p>
+                <p id="validation-message" class="text-sm mt-1"></p>
+            </div>
+        </section>
+
+        <!-- STEP 2: Location and Review Input -->
+        <section id="step-2" class="space-y-6 hidden">
+            <h2 class="text-xl font-semibold text-gray-800 border-b pb-2">Step 2: Review Items and Add Location</h2>
+            
+            <!-- General Import Details (for Master Table) -->
+            <div id="master-data-review" class="bg-gray-50 p-4 rounded-lg border border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Data from file will be mapped here (e.g., Vendor Name, Invoice No) -->
+            </div>
+
+            <!-- Item List for Location Input -->
+            <div id="items-to-locate-container" class="space-y-4 max-h-96 overflow-y-auto p-2 rounded-lg border border-gray-200">
+                <p class="text-gray-500 text-center py-4">Imported items will appear here...</p>
+            </div>
+            
+            <div class="flex justify-end space-x-4">
+                <button id="back-to-step-1-btn" class="btn-secondary-custom py-2 px-4 rounded-lg font-semibold transition duration-200">
+                    <i class="fas fa-arrow-left mr-2"></i> Back to File Upload
+                </button>
+                <button id="import-stocks-btn" class="btn-primary-custom py-3 px-6 rounded-lg font-semibold disabled:opacity-50 transition duration-200">
+                    <i class="fas fa-save mr-2"></i> Finalize and Import Stocks
+                </button>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Link to Custom JavaScript file -->
+    <script src="/js/importStock.js"></script>
+
+</body>
+</html>

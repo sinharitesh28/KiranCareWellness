@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login to Kiran Rx Smart</title>
+    <!-- Load Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Custom Tailwind Configuration with the specified color palette
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'p-primary': '#00712D', // Dark Green
+                        'p-secondary': '#D5ED9F', // Light Green/Yellow
+                        'p-tertiary': '#FFFBE6', // Cream/Off-White
+                        'p-quarterly': '#FF9100', // Orange/Amber
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/css/logIn.css">
+</head>
+<body class="bg-p-tertiary flex items-center justify-center min-h-screen p-4 font-sans antialiased">
+
+    <!-- Login Card: Centered and responsive -->
+    <main class="w-full max-w-md bg-white p-8 shadow-2xl rounded-xl space-y-6 transition-all duration-300 sm:p-10" role="main" aria-labelledby="page-title">
+        
+        <!-- Header & Logo -->
+        <div class="flex flex-col items-center">
+            <!-- Logo Image: Now using the specified SVG file -->
+            <img 
+                src="/img/KiranCareWellnessLogo.svg" 
+                alt="Kiran Rx Smart Logo" 
+                class="w-20 h-20 mb-4 rounded-full border-4 border-p-secondary shadow-lg object-contain" 
+                onerror="this.onerror=null; this.src='https://placehold.co/64x64/00712D/D5ED9F?text=KR'"
+            />
+            <h1 id="page-title" class="text-2xl font-extrabold text-p-primary text-center tracking-tight">Login to Kiran Rx Smart</h1>
+            <p class="text-sm text-gray-500 text-center mt-1">Please authenticate using your employee code and OTP.</p>
+        </div>
+
+        <section class="authentication space-y-6" aria-label="employee authentication">
+            
+            <!-- Employee Code Input & Send OTP Button -->
+            <div class="space-y-2">
+                <label for="employeeCode" class="block text-sm font-semibold text-gray-700">Enter Employee Code</label>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input id="employeeCode" name="employeeCode" type="number" inputmode="numeric" autocomplete="off" class="input-style w-full p-3 border border-gray-300 rounded-lg focus:ring-p-primary focus:border-p-primary" placeholder="Employee ID (e.g., 12345)" />
+                    <button type="button" class="btn bg-p-primary text-white hover:bg-p-primary/90 transition duration-150 rounded-lg p-3 font-semibold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-md shadow-p-primary/30" id="sendOtp">
+                        Send OTP
+                    </button>
+                </div>
+            </div>
+
+            <!-- OTP Input -->
+            <div class="space-y-2">
+                <label for="otp" class="block text-sm font-semibold text-gray-700">Enter OTP</label>
+                <input id="otp" name="otp" type="number" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" class="input-style w-full p-3 border border-gray-300 rounded-lg focus:ring-p-primary focus:border-p-primary" />
+            </div>
+
+            <!-- Validation Button -->
+            <div class="pt-2">
+                <button type="button" class="btn bg-p-quarterly text-white w-full hover:bg-p-quarterly/90 transition duration-150 rounded-lg p-3 font-bold shadow-xl shadow-p-quarterly/50 disabled:opacity-50 disabled:cursor-not-allowed" id="validateOtp">
+                    Validate OTP
+                </button>
+            </div>
+
+            <!-- Hint/Error Message -->
+            <div class="p-3 text-sm text-center rounded-lg hint flex items-center justify-center" aria-live="polite" id="authHint"></div>
+        </section>
+    </main>
+
+    <script src="/js/logIn.js"></script>
+</body>
+</html>

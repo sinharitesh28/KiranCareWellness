@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Import Template Creator</title>
+    
+    <!-- Load Tailwind CSS for rapid responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1"></script>
+    <!-- Custom Tailwind Configuration (MUST be in a script tag) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#00712D',      /* Dark Green */
+                        'secondary': '#D5ED9F',    /* Light Pastel Green/Yellow */
+                        'tertiary': '#FFFBE6',     /* Very Light Cream/Yellow */
+                        'quarterly': '#FF9100',    /* Bright Orange (Accent) */
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/ImportTemplate.css">
+</head>
+<body class="bg-tertiary font-sans min-h-screen p-4 sm:p-8 flex justify-center items-start">
+
+    <div class="w-full max-w-4xl">
+        
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-primary mb-2">Import Template Creator</h1>
+            <p class="text-lg text-gray-600">Map your Excel/CSV columns to database fields for easy stock import.</p>
+        </header>
+
+        <!-- Main Form Container -->
+        <form id="templateForm" class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl border border-primary/10">
+
+            <!-- Step 1: File Upload & Header Extraction -->
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-primary mb-4">Step 1: Upload File & Map Columns</h2>
+                <div class="flex flex-col sm:flex-row sm:items-end space-y-4 sm:space-y-0 sm:space-x-4 mb-4">
+                    <div class="flex-grow">
+                        <label for="template_file" class="block text-sm font-medium text-gray-700">Template File (Excel or CSV)</label>
+                        <input type="file" id="template_file" name="template_file" accept=".xlsx,.xls,.csv" required 
+                               class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-secondary file:text-primary hover:file:bg-secondary/80">
+                    </div>
+                    <button type="button" id="extractHeadersButton" class="w-full sm:w-auto bg-quarterly text-white font-semibold py-2 px-6 rounded-lg hover:bg-quarterly/80 transition duration-150 shadow-md">
+                        Extract Headers
+                    </button>
+                </div>
+                <p id="templateFileError" class="text-sm text-red-500 mt-2 hidden">Please upload a file first.</p>
+            </div>
+
+            <hr class="border-gray-200 mb-8">
+
+            <!-- Template Naming and Preview -->
+            <div id="templateNamingSection" class="mb-8 hidden">
+                <label for="template_name" class="block text-sm font-medium text-gray-700">Template Name</label>
+                <input type="text" id="template_name" name="template_name" required 
+                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 text-lg font-bold focus:ring-primary focus:border-primary placeholder-gray-400" 
+                       placeholder="e.g., Cipla Vendor Template 2024">
+                <p id="templateNamePreview" class="text-xs text-gray-500 mt-2"></p>
+            </div>
+
+            <!-- Mapping Fields (Dropdowns) -->
+            <div id="mappingSection" class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 hidden">
+                <!-- Dropdowns will be populated here by JavaScript -->
+            </div>
+            
+            <p id="mappingError" class="text-sm text-red-500 mt-4 hidden"></p>
+
+            <!-- Action Buttons for Initial Mapping (REPLACED ORIGINAL SUBMIT BUTTON) -->
+            <div id="initialActionButtons" class="mt-8 flex justify-end hidden">
+                <!-- This button now starts the date format validation process -->
+                <button type="button" id="startValidationButton" class="bg-primary text-white font-semibold py-3 px-8 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md mr-4">
+                    Save Template
+                </button>
+                <button type="button" id="resetFormButton" class="bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg hover:bg-gray-500 transition duration-150 shadow-md" onclick="resetForm()">
+                    Reset
+                </button>
+            </div>
+
+            <!-- NEW: Date Format Validation Section (Hidden by Default) -->
+            <div id="dateFormatValidationSection" class="hidden bg-tertiary p-6 rounded-xl shadow-lg border border-primary/20 mt-8">
+                <h2 class="text-xl font-bold text-primary mb-4">Step 2: Validate Date Formats</h2>
+                <p class="text-sm text-gray-600 mb-6">
+                    Please observe the sample date value from the second row and provide the correct **MySQL date format string** (e.g., if the sample is `23/12/2023`, the format is `%d/%m/%Y`). 
+                    Refer to MySQL's `STR_TO_DATE` format specifiers.
+                </p>
+                
+                <div id="dateFieldsContainer" class="space-y-4">
+                    <!-- Dynamic date fields will be inserted here by ImportTemplate.js -->
+                </div>
+                
+                <div class="mt-6 flex justify-end">
+                    <button type="button" id="validateFormatButton" class="bg-quarterly text-white font-semibold py-2 px-6 rounded-lg hover:bg-quarterly/80 transition duration-150 shadow-md mr-4">
+                        Validate Date Format
+                    </button>
+                    <button type="button" id="saveTemplateFinalButton" class="bg-primary text-white font-semibold py-2 px-6 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md hidden">
+                        Confirm & Save Template
+                    </button>
+                </div>
+                <p id="formatValidationError" class="text-sm text-red-500 mt-3 hidden"></p>
+            </div>
+
+        </form>
+
+    </div>
+
+    <!-- Message Modal/Toast Container -->
+    <div id="messageContainer" class="fixed top-5 right-5 z-50 space-y-3">
+        <!-- Messages will appear here -->
+    </div>
+
+
+    <!-- External Libraries and Custom Scripts -->
+    <!-- Mock XLSX - should be replaced with real script in production -->
+    <script>
+        const XLSX = {
+            read: (data, opts) => {
+                console.log("XLSX.read simulation called.");
+                return { 
+                    SheetNames: ['Sheet1'], 
+                    Sheets: { 
+                        'Sheet1': { 
+                            // Mock cells including header (A1, B1) and second row (A2, B2)
+                            'A1': { v: 'Invoice No' }, 
+                            'B1': { v: 'Vendor Name' },
+                            'C1': { v: 'Invoice Date' },
+                            
+                            // Mock second row data: one number, one string, one date-like
+                            'A2': { v: 12345 },
+                            'B2': { v: 'Cipla Ltd' },
+                            'C2': { v: '23/12/2023' }, // Date sample
+                            
+                            '!ref': 'A1:C2' // Defines the range
+                        } 
+                    } 
+                };
+            },
+            utils: {
+                sheet_to_json: (sheet, opts) => {
+                    console.log("XLSX.utils.sheet_to_json simulation called.");
+                    // Mock function to simulate converting sheet to JSON, specifically for headers
+                    const range = XLSX.utils.decode_range(sheet['!ref']);
+                    const headers = [];
+                    // Extract headers from the mock cells
+                    for (let C = range.s.c; C <= range.e.c; ++C) {
+                        const cellAddress = XLSX.utils.encode_cell({c: C, r: range.s.r});
+                        if(sheet[cellAddress]) {
+                            headers.push(sheet[cellAddress].v);
+                        }
+                    }
+                    return headers.length > 0 ? [Object.fromEntries(headers.map(h => [h, '']))] : [];
+                },
+                decode_range: (range) => {
+                    // Mock range decoder
+                    return { s: { c: 0, r: 0 }, e: { c: 10, r: 0 } }; // A1 to K1 (0-indexed)
+                },
+                encode_cell: (cell) => {
+                    // Mock cell encoder
+                    const colLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                    return colLetters[cell.c] + (cell.r + 1);
+                }
+            }
+        };
+
+
+    </script>
+    <!-- Link to Custom JavaScript file -->
+    <script src="/js/ImportTemplate.js"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+/*
+ * Custom CSS for Import Stock Template Creator
+ * Leverages Tailwind CSS utilities in the HTML,
+ * but defines custom components and base styles here.
+ */
+
+/* 1. Base Styles & Typography */
+body {
+    /* Use the font defined in the HTML head */
+    font-family: 'Inter', sans-serif;
+}
+
+/* Custom style for required field labels */
+.required-label::after {
+    content: '*';
+    color: var(--color-quarterly); /* Use accent color for required star */
+    margin-left: 4px;
+    font-weight: bold;
+}
+
+/* 2. Custom Button Styles (Applying Color Palette) */
+:root {
+    --color-primary: #00712D;      /* Dark Green */
+    --color-secondary: #D5ED9F;    /* Light Pastel Green/Yellow */
+    --color-quarterly: #FF9100;    /* Bright Orange (Accent) */
+}
+
+/* Primary Button: Dark Green background, White text */
+.btn-primary-custom {
+    background-color: var(--color-primary);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+}
+
+.btn-primary-custom:hover {
+    background-color: #005A24; /* Slightly darker shade on hover */
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+/* Secondary Button (for Reset): Light Green background, Dark Green text */
+.btn-secondary-custom {
+    background-color: var(--color-secondary);
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+}
+
+.btn-secondary-custom:hover {
+    background-color: #C3E08A;
+}
+
+/* 3. Form & Input Focus Styling */
+input[type="text"], input[type="file"], select {
+    /* Subtle focus ring using the Primary color */
+    transition: all 0.2s ease-in-out;
+}
+
+input[type="text"]:focus, select:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(0, 113, 45, 0.2);
+}
+
+/* Error class for fields */
+.error {
+    border-color: #FF5252 !important; /* Red */
+    box-shadow: 0 0 0 3px rgba(255, 82, 82, 0.2);
+}
+
+/* Highlight for required fields in mapping (now handled by :after pseudo-element in .required-label) */
+.required {
+    color: var(--color-quarterly); /* Quarterly Accent Color */
+    margin-left: 4px;
+    font-weight: bold;
+}
+
+/* 4. Shop Logo Styling (Updated to provide a unique effect) */
+.shop-logo-container {
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+
+.shop-logo-container:hover {
+    /* Subtle 3D tilt effect on hover */
+    transform: rotate(3deg) scale(1.05);
+    /* Adding a glow effect using the accent color */
+    box-shadow: 0 0 0 4px var(--color-quarterly), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}

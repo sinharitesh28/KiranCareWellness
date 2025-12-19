@@ -1,0 +1,119 @@
+        .btn-primary-custom {
+            background-color: #00712D;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            transition: all 0.2s;
+        }
+
+        .btn-primary-custom:hover {
+            background-color: #005A25;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary-custom {
+            background-color: #D5ED9F;
+            color: #00712D;
+            border: 1px solid #00712D;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary-custom:hover {
+            background-color: #C3E08A;
+        }
+
+        /* Styling for the loading spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #00712D;
+            animation: spin 1s ease infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Hide number input arrows */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        /* Payment method selection styles */
+.payment-option {
+    transition: all 0.2s ease;
+    border: 2px solid #D1D5DB;
+}
+
+.payment-option.selected {
+    background-color: #00712D;
+    color: white;
+    border-color: #00712D;
+    box-shadow: 0 2px 4px rgba(0, 113, 45, 0.3);
+}
+
+.payment-option:hover {
+    border-color: #00712D;
+    transform: translateY(-1px);
+}
+
+/* Ensure the selected payment method has proper styling */
+.payment-option input[type="radio"]:checked + span {
+    background-color: #00712D;
+    color: white;
+}
+
+/* Style for the payment option spans */
+.payment-option span {
+    display: block;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+/* Selected state styling */
+.payment-option input[type="radio"]:checked ~ span {
+    background-color: #00712D;
+    color: white;
+}
+
+/* Print Button Styling */
+#printBill:not(:disabled) {
+    background: linear-gradient(135deg, #00712D 0%, #005a23 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 113, 45, 0.3);
+    transition: all 0.3s ease;
+}
+
+#printBill:not(:disabled):hover {
+    background: linear-gradient(135deg, #005a23 0%, #004419 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 113, 45, 0.4);
+}
+
+#printBill:not(:disabled):active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 113, 45, 0.3);
+}
+
+/* Enhanced button states */
+.btn-outline-custom {
+    background-color: transparent;
+    color: #00712D;
+    border: 2px solid #00712D;
+    transition: all 0.3s ease;
+}
+
+.btn-outline-custom:hover {
+    background-color: #00712D;
+    color: white;
+    transform: translateY(-1px);
+}
