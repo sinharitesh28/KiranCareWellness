@@ -10,6 +10,7 @@ const barcodeRoutes = require('./routes/barcodeRoutes'); // NEW: Add barcode rou
 const dispenseRoutes = require('./routes/dispenseRoutes');
 const transactionRoutes = require('./routes/transactions');
 const analyticsRoutes = require('./routes/analyticsRoutes'); // NEW: Analytics routes
+const customerRoutes = require('./routes/customerRoutes'); // NEW: Customer routes
 
 
 const app = express();
@@ -77,6 +78,7 @@ app.use('/api/barcode', barcodeRoutes); // NEW: Mount barcode routes
 app.use('/api/dispense', dispenseRoutes);
 app.use('/api/dispense', transactionRoutes);
 app.use('/api/analytics', analyticsRoutes); // NEW: Analytics API
+app.use('/api/customers', customerRoutes); // NEW: Customer API
 
 // simple error handler
 app.use((err, req, res, next) => {
