@@ -8,6 +8,7 @@ class MedicineDispensing {
         this.currentStream = null;
         this.currentFacingMode = 'environment';
         this.codeReader = null;
+        this.qrCodeObj = null; // Store QR code instance
         this.doseDispensingSearchMode = false; // Search filter for dose medicines
         this.handlePaymentMethodSelection();
         this.init();
@@ -262,6 +263,16 @@ class MedicineDispensing {
     handlePaymentMethodChange(event) {
         // No special validation needed for pay_later
         this.updateActionButtons();
+
+        const method = event.target.value;
+        const qrContainer = document.getElementById('upiQrContainer');
+
+        if (method === 'upi') {
+            qrContainer.classList.remove('hidden');
+            this.generateUPIQRCode();
+        } else {
+            qrContainer.classList.add('hidden');
+        }
     }
 
     async handleSearchInput(event) {
@@ -819,6 +830,11 @@ class MedicineDispensing {
         // Update UI
         document.getElementById('subtotalAmount').textContent = `₹${subtotal.toFixed(2)}`;
         document.getElementById('totalAmount').textContent = `₹${total.toFixed(2)}`;
+
+        // Update QR code if visible
+        if (document.querySelector('input[name="paymentMethod"][value="upi"]').checked) {
+            this.generateUPIQRCode();
+        }
     }
 
     updateActionButtons() {
@@ -1456,6 +1472,47 @@ class MedicineDispensing {
         const query = document.getElementById('medicineSearch').value.trim();
         if (query.length >= 2) {
             this.performSearch(query);
+        }
+    }
+
+    generateUPIQRCode() {
+        const totalText = document.getElementById('totalAmount').textContent.replace('₹', '');
+        const amount = parseFloat(totalText) || 0;
+        const qrContainer = document.getElementById('qrcode');
+        const amountDisplay = document.getElementById('qrAmountDisplay');
+
+        if (amount <= 0) {
+            qrContainer.innerHTML = '<p class="text-xs text-red-500">Add items to generate QR</p>';
+            amountDisplay.textContent = '₹0.00';
+            this.qrCodeObj = null; // Reset since DOM is cleared
+            return;
+        }
+
+        amountDisplay.textContent = `₹${amount.toFixed(2)}`;
+
+        // UPI URL Format: upi://pay?pa=<UPI_ID>&pn=<NAME>&am=<AMOUNT>&cu=INR
+        const upiUrl = `upi://pay?pa=Q623297548@ybl&pn=KiranCareWellness&am=${amount.toFixed(2)}&cu=INR`;
+
+        try {
+            // Check if we have a valid QR object and the container isn't displaying text
+            if (this.qrCodeObj && qrContainer.querySelector('canvas, img')) {
+                this.qrCodeObj.clear();
+                this.qrCodeObj.makeCode(upiUrl);
+            } else {
+                qrContainer.innerHTML = ''; // Clear text/placeholder
+                this.qrCodeObj = new QRCode(qrContainer, {
+                    text: upiUrl,
+                    width: 128,
+                    height: 128,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+            }
+        } catch (e) {
+            console.error('QR Code generation failed:', e);
+            qrContainer.innerHTML = '<p class="text-xs text-red-500">Error</p>';
+            this.qrCodeObj = null;
         }
     }
 }

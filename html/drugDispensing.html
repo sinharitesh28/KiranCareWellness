@@ -319,6 +319,13 @@
                                 </label>
                             </div>
                         </div>
+
+                        <!-- UPI QR Code Container -->
+                        <div id="upiQrContainer" class="hidden flex flex-col items-center justify-center p-4 bg-gray-50 rounded-lg border border-gray-200 transition-all duration-300">
+                            <div id="qrcode" class="bg-white p-2 rounded shadow-sm mb-2"></div>
+                            <p class="text-sm font-semibold text-primary mt-2">Scan to Pay: <span id="qrAmountDisplay">₹0.00</span></p>
+                            <p class="text-xs text-gray-500">UPI ID: Q623297548@ybl</p>
+                        </div>
                         
                         <!-- Main Action Buttons -->
                         <div class="space-y-2">
@@ -354,6 +361,7 @@
     </div>
     
     <!-- JavaScript Files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script src="/js/drugDispensing.js"></script>
