@@ -45,11 +45,12 @@ def extract_headers_and_sample(file_path: str) -> Dict[str, Any]:
         file_type = ""
         
         # Read the file
-        if file_ext in ['.xlsx', '.xls']:
+        if file_ext == '.xlsx':
             file_type = "excel"
-            # Read first two rows: header (row 0) and sample data (row 1)
-            # header=None prevents pandas from using the first row as headers yet
             df = pd.read_excel(final_path, header=None, nrows=2, engine='openpyxl')
+        elif file_ext == '.xls':
+            file_type = "excel"
+            df = pd.read_excel(final_path, header=None, nrows=2, engine='xlrd')
         elif file_ext == '.csv':
             file_type = "csv"
             df = pd.read_csv(final_path, header=None, nrows=2)

@@ -547,100 +547,255 @@ router.post('/ensure-dose-stock', requireAuth, async (req, res) => {
     }
 });
 
-// The generateBillPDF function needs to be included in the file as well
-// I'll copy the existing one from the previous read_file output
-// ... (Including generateBillPDF implementation from previous read)
-
+// Helper for PDF
 async function generateBillPDF(doc, transaction, items) {
-    return new Promise((resolve) => {
-        // ... (Implementation as seen in read_file output)
-        // Since I'm overwriting the file, I must include this helper function fully.
-        // Using the content from my previous read_file.
-        
-        const rootDir = path.join(__dirname, '..', '..');
-        const logoPath = path.join(rootDir, 'img', 'KiranCareWellnessLogo.png');
-        const signaturePath = path.join(rootDir, 'img', 'sign_2.png');
-        const colors = { primary: '#00712D', secondary: '#D5ED9F', accent: '#FF9100', dark: '#2D3748', light: '#F8F9FA', gray: '#718096' };
-        const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toFixed(2)}`.replace('¹', '');
-        const addNewPage = (doc) => {
-            doc.addPage();
-            doc.fontSize(16).font('Helvetica-Bold').fillColor(colors.primary).text('Kiran Care Wellness - INVOICE', 50, 30, { align: 'center' });
-            doc.moveTo(50, 55).lineTo(545, 55).strokeColor(colors.primary).lineWidth(0.5).stroke();
-            return 70;
-        };
-
-        let currentY = 50;
+    return new Promise((resolve, reject) => {
         try {
-            if (fs.existsSync(logoPath)) {
-                doc.image(logoPath, 50, currentY, { width: 45, height: 45 });
-                doc.fontSize(18).font('Helvetica-Bold').fillColor(colors.primary).text('Kiran Care Wellness', 105, currentY + 5);
+            // Paths
+            const rootDir = path.join(__dirname, '..', '..');
+            const logoPath = path.join(rootDir, 'img', 'KiranCareWellnessLogo.png');
+            const signaturePath = path.join(rootDir, 'img', 'sign_2.png');
+            
+            // Fonts - Registering Custom Fonts
+            const fontRegular = path.join(__dirname, '..', 'fonts', 'Roboto-Regular.ttf');
+            const fontBold = path.join(__dirname, '..', 'fonts', 'Roboto-Bold.ttf');
+            
+            // Fallback to standard fonts if custom ones aren't found
+            // Check if fs.existsSync throws (permission issues)
+            let regularFontName = 'Helvetica';
+            let boldFontName = 'Helvetica-Bold';
+            
+            try {
+                if (fs.existsSync(fontRegular)) {
+                    doc.registerFont('Roboto-Regular', fontRegular);
+                    regularFontName = 'Roboto-Regular';
+                }
+                if (fs.existsSync(fontBold)) {
+                    doc.registerFont('Roboto-Bold', fontBold);
+                    boldFontName = 'Roboto-Bold';
+                }
+            } catch (e) {
+                console.warn('Font loading failed, falling back to standard fonts:', e.message);
+            }
+
+            // Colors & Config
+            const colors = { 
+                primary: '#00712D', 
+                secondary: '#D5ED9F', 
+                accent: '#FF9100', 
+                dark: '#1a202c', 
+                gray: '#718096', 
+                lightGray: '#F7FAFC',
+                border: '#E2E8F0'
+            };
+
+            const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toFixed(2)}`;
+            const safeText = (text, fallback = '') => (text === null || text === undefined) ? fallback : String(text);
+            const safeDate = (d) => {
+                try {
+                    const date = d ? new Date(d) : new Date();
+                    return isNaN(date.getTime()) ? new Date() : date;
+                } catch (e) { return new Date(); }
+            };
+
+            const txnDate = safeDate(transaction.transaction_date || transaction.created_at);
+            
+            // Layout Constants
+            const margins = { top: 40, left: 40, right: 40, bottom: 40 };
+            const width = doc.page.width - margins.left - margins.right;
+
+            // --- Helper: Draw Header ---
+            const drawHeader = (y) => {
+                // Logo
+                try {
+                    if (fs.existsSync(logoPath)) {
+                        doc.image(logoPath, margins.left, y, { width: 50 });
+                    }
+                } catch (imgErr) {
+                    console.warn('Logo image load failed:', imgErr.message);
+                }
+
+                // Company Name
+                doc.font(boldFontName).fontSize(20).fillColor(colors.primary)
+                   .text('Kiran Care Wellness', margins.left + 60, y);
+                
+                // Tagline/Subtitle
+                doc.font(regularFontName).fontSize(9).fillColor(colors.gray)
+                   .text('Generic Medical Store', margins.left + 60, y + 22);
+
+                // Right-aligned Invoice Title
+                doc.font(boldFontName).fontSize(24).fillColor(colors.dark)
+                   .text('INVOICE', 0, y, { align: 'right', width: width + margins.left });
+                
+                // Store Info (Centered/Below header for clean look)
+                const startY = y + 60;
+                doc.moveTo(margins.left, startY).lineTo(doc.page.width - margins.right, startY).strokeColor(colors.border).lineWidth(1).stroke();
+                
+                // Contact Details Row
+                doc.font(regularFontName).fontSize(8).fillColor(colors.dark)
+                   .text('Shop no. A1, Sai Darshan Apt., Alkapuri Road, Nalasopara (E) 401209', margins.left, startY + 10, { width: width, align: 'center' })
+                   .text('Mobile: 9076828408, 9900235218  |  Email: kirancarewellness@gmail.com', margins.left, startY + 22, { width: width, align: 'center' })
+                   .text('Drug Lic: MH-PL1-578747, MH-PL1-578748, MH-PL1-581222, MH-PL1-581221', margins.left, startY + 34, { width: width, align: 'center' });
+                
+                return startY + 55;
+            };
+
+            let currentY = drawHeader(margins.top);
+
+            // --- Bill & Customer Details Grid ---
+            const detailsTop = currentY;
+            const colWidth = width / 2;
+            
+            // Left Column: Bill Details
+            doc.font(boldFontName).fontSize(10).fillColor(colors.primary).text('INVOICE DETAILS', margins.left, detailsTop);
+            doc.rect(margins.left, detailsTop + 15, colWidth - 10, 65).fill(colors.lightGray);
+            
+            doc.font(boldFontName).fontSize(9).fillColor(colors.dark).text('Bill Number:', margins.left + 10, detailsTop + 25);
+            doc.font(regularFontName).text(safeText(transaction.bill_number, 'N/A'), margins.left + 80, detailsTop + 25);
+            
+            doc.font(boldFontName).text('Date:', margins.left + 10, detailsTop + 40);
+            doc.font(regularFontName).text(txnDate.toLocaleDateString('en-IN'), margins.left + 80, detailsTop + 40);
+            
+            doc.font(boldFontName).text('Time:', margins.left + 10, detailsTop + 55);
+            doc.font(regularFontName).text(txnDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }), margins.left + 80, detailsTop + 55);
+
+            // Right Column: Customer Details
+            const col2X = margins.left + colWidth;
+            doc.font(boldFontName).fontSize(10).fillColor(colors.primary).text('CUSTOMER DETAILS', col2X, detailsTop);
+            doc.rect(col2X, detailsTop + 15, colWidth, 65).fill(colors.lightGray);
+
+            doc.font(boldFontName).fontSize(9).fillColor(colors.dark).text('Name:', col2X + 10, detailsTop + 25);
+            doc.font(regularFontName).text(safeText(transaction.customer_name, 'Walk-in Customer'), col2X + 60, detailsTop + 25);
+
+            doc.font(boldFontName).text('Mobile:', col2X + 10, detailsTop + 40);
+            doc.font(regularFontName).text(safeText(transaction.customer_mobile, 'N/A'), col2X + 60, detailsTop + 40);
+            
+            doc.font(boldFontName).text('Payment:', col2X + 10, detailsTop + 55);
+            doc.font(regularFontName).text(safeText(transaction.payment_method, 'CASH').toUpperCase(), col2X + 60, detailsTop + 55);
+
+            currentY += 90;
+
+            // --- Item Table ---
+            const drawTableHead = (y) => {
+                doc.rect(margins.left, y, width, 25).fill(colors.primary);
+                doc.font(boldFontName).fontSize(9).fillColor('#FFFFFF');
+                doc.text('ITEM NAME', margins.left + 10, y + 8, { width: 220 });
+                doc.text('UNIT PRICE', margins.left + 240, y + 8, { width: 80, align: 'right' });
+                doc.text('QTY', margins.left + 330, y + 8, { width: 50, align: 'center' });
+                doc.text('TOTAL', margins.left + 400, y + 8, { width: 110, align: 'right' });
+                return y + 25;
+            };
+
+            currentY = drawTableHead(currentY);
+
+            let subtotal = 0;
+            
+            if (Array.isArray(items)) {
+                items.forEach((item, index) => {
+                    // Check for page break
+                    if (currentY > doc.page.height - 150) {
+                        doc.addPage();
+                        currentY = drawHeader(margins.top); // Re-draw header on new page
+                        currentY = drawTableHead(currentY + 10);
+                    }
+
+                    // Zebra Striping
+                    const bgColor = index % 2 === 0 ? '#FFFFFF' : colors.lightGray;
+                    const rowHeight = item.item_description ? 35 : 25; // Taller row if description exists
+                    
+                    doc.rect(margins.left, currentY, width, rowHeight).fill(bgColor);
+                    
+                    // Row Content
+                    doc.font(regularFontName).fontSize(9).fillColor(colors.dark);
+                    
+                    // Item Name & Desc
+                    doc.text(safeText(item.item_name), margins.left + 10, currentY + 8, { width: 220, lineBreak: false, ellipsis: true });
+                    if (item.item_description) {
+                        doc.fontSize(7).fillColor(colors.gray)
+                           .text(safeText(item.item_description), margins.left + 10, currentY + 20, { width: 220, lineBreak: false, ellipsis: true });
+                    }
+                    
+                    doc.font(regularFontName).fontSize(9).fillColor(colors.dark);
+                    doc.text(formatCurrency(item.selling_price), margins.left + 240, currentY + 8, { width: 80, align: 'right' });
+                    doc.text(safeText(item.quantity, '0'), margins.left + 330, currentY + 8, { width: 50, align: 'center' });
+                    doc.text(formatCurrency(item.total_price), margins.left + 400, currentY + 8, { width: 110, align: 'right' });
+
+                    currentY += rowHeight;
+                    subtotal += parseFloat(item.total_price || 0);
+                });
+            }
+
+            // --- Financial Summary & Footer ---
+            
+            // Ensure space for summary
+            if (currentY > doc.page.height - 200) {
+                doc.addPage();
+                currentY = margins.top;
             } else {
-                doc.fontSize(20).font('Helvetica-Bold').fillColor(colors.primary).text('Kiran Care Wellness', 50, currentY, { align: 'center' });
+                currentY += 20;
             }
+
+            const summaryWidth = 200;
+            const summaryX = doc.page.width - margins.right - summaryWidth;
+
+            // Draw Summary Box
+            doc.rect(summaryX - 10, currentY, summaryWidth + 10, 100).fill(colors.lightGray).stroke(colors.border).lineWidth(1);
+            
+            let summaryY = currentY + 10;
+            
+            // Subtotal
+            doc.font(regularFontName).fontSize(10).fillColor(colors.dark).text('Subtotal:', summaryX, summaryY);
+            doc.text(formatCurrency(subtotal), summaryX, summaryY, { width: summaryWidth, align: 'right' });
+            summaryY += 20;
+
+            // Discount
+            if (transaction.discount_amount > 0) {
+                const discountLabel = transaction.discount_type === 'percentage' ? 'Discount (%):' : 'Discount (₹):';
+                doc.fillColor(colors.accent).text(discountLabel, summaryX, summaryY);
+                doc.text(`-${formatCurrency(transaction.discount_amount)}`, summaryX, summaryY, { width: summaryWidth, align: 'right' });
+                summaryY += 20;
+            }
+
+            // Divider
+            doc.moveTo(summaryX, summaryY).lineTo(summaryX + summaryWidth, summaryY).strokeColor(colors.border).stroke();
+            summaryY += 10;
+
+            // Net Total
+            doc.font(boldFontName).fontSize(14).fillColor(colors.primary).text('Net Total:', summaryX, summaryY);
+            doc.text(formatCurrency(transaction.total_amount), summaryX, summaryY, { width: summaryWidth, align: 'right' });
+
+            // Signature
+            const sigY = currentY + 40;
+            try {
+                if (fs.existsSync(signaturePath)) {
+                    doc.image(signaturePath, margins.left, sigY, { width: 100, height: 40 });
+                }
+            } catch (e) { console.warn('Signature image load failed:', e.message); }
+            doc.font(boldFontName).fontSize(9).fillColor(colors.dark).text('Authorized Signature', margins.left, sigY + 45);
+
+            // --- Footer Terms & Thank You ---
+            let footerY = doc.page.height - 130;
+            
+            // Terms
+            doc.rect(margins.left, footerY, width, 55).fill('#F0FFF4').stroke(colors.primary).lineWidth(0.5);
+            doc.font(boldFontName).fontSize(9).fillColor(colors.primary).text('TERMS & CONDITIONS:', margins.left + 10, footerY + 8);
+            doc.font(regularFontName).fontSize(7).fillColor(colors.dark);
+            doc.text('1. Goods once sold cannot be returned or exchanged.', margins.left + 10, footerY + 22);
+            doc.text('2. Please check expiry date and other details at the time of purchase.', margins.left + 10, footerY + 32);
+            doc.text('3. Consult doctor before taking medicine.', margins.left + 10, footerY + 42);
+
+            // Thank you note
+            doc.font(boldFontName).fontSize(10).fillColor(colors.primary)
+               .text('Thank You for Choosing Kiran Care Wellness!', 0, footerY + 70, { align: 'center', width: doc.page.width });
+            
+            doc.font(regularFontName).fontSize(8).fillColor(colors.gray)
+               .text('This is a computer generated invoice.', 0, footerY + 85, { align: 'center', width: doc.page.width });
+
+            resolve();
         } catch (error) {
-            doc.fontSize(20).font('Helvetica-Bold').fillColor(colors.primary).text('Kiran Care Wellness', 50, currentY, { align: 'center' });
+            console.error('generateBillPDF Error:', error);
+            reject(error);
         }
-        currentY += 50;
-        doc.fontSize(8).font('Helvetica').fillColor(colors.gray).text('Generic Medical Store', 50, currentY, { align: 'center' }).text('Shop no. A1, Sai Darshan Apt., Alkapuri Road, Nalasopara (E) 401209', 50, currentY + 10, { align: 'center' }).text('Mobile: 9076828408, 9900235218 | Email: kirancarewellness@gmail.com', 50, currentY + 20, { align: 'center' }).text('Drug Lic: MH-PL1-578747, MH-PL1-578748, MH-PL1-581222, MH-PL1-581221', 50, currentY + 30, { align: 'center' });
-        currentY += 50;
-        doc.fontSize(16).font('Helvetica-Bold').fillColor(colors.dark).text('INVOICE', 50, currentY, { align: 'center' });
-        currentY += 25;
-        const billInfoTop = currentY;
-        doc.fontSize(9).font('Helvetica-Bold').fillColor(colors.dark).text('BILL DETAILS', 50, billInfoTop).font('Helvetica').fillColor(colors.gray).text(`Bill No: ${transaction.bill_number}`, 50, billInfoTop + 12).text(`Date: ${new Date(transaction.transaction_date).toLocaleDateString('en-IN')}`, 50, billInfoTop + 24).text(`Time: ${new Date(transaction.transaction_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`, 50, billInfoTop + 36);
-        doc.font('Helvetica-Bold').fillColor(colors.dark).text('CUSTOMER DETAILS', 300, billInfoTop).font('Helvetica').fillColor(colors.gray).text(`Name: ${transaction.customer_name || 'Walk-in Customer'}`, 300, billInfoTop + 12).text(`Mobile: ${transaction.customer_mobile || 'N/A'}`, 300, billInfoTop + 24).text(`Payment: ${transaction.payment_method.toUpperCase()}`, 300, billInfoTop + 36);
-        currentY += 60;
-        const tableTop = currentY;
-        doc.rect(50, tableTop, 495, 22).fill(colors.primary);
-        doc.fontSize(10).font('Helvetica-Bold').fillColor('#FFFFFF').text('ITEM NAME', 55, tableTop + 7).text('UNIT PRICE', 350, tableTop + 7).text('QTY', 430, tableTop + 7).text('TOTAL', 470, tableTop + 7);
-        currentY = tableTop + 27;
-        let subtotal = 0;
-        items.forEach((item, index) => {
-            if (currentY > 650) {
-                currentY = addNewPage(doc);
-                doc.rect(50, currentY, 495, 22).fill(colors.primary);
-                doc.fontSize(10).font('Helvetica-Bold').fillColor('#FFFFFF').text('ITEM NAME', 55, currentY + 7).text('UNIT PRICE', 350, currentY + 7).text('QTY', 430, currentY + 7).text('TOTAL', 470, currentY + 7);
-                currentY += 27;
-            }
-            const bgColor = index % 2 === 0 ? '#FFFFFF' : colors.light;
-            doc.rect(50, currentY, 495, 20).fill(bgColor);
-            doc.fontSize(9).font('Helvetica').fillColor(colors.dark).text(item.item_name, 55, currentY + 6, { width: 280 }).text(formatCurrency(item.selling_price), 350, currentY + 6).text(item.quantity.toString(), 430, currentY + 6).text(formatCurrency(item.total_price), 470, currentY + 6);
-            if (item.item_description && item.item_description.trim() !== '') {
-                doc.fontSize(7).fillColor(colors.gray).text(item.item_description, 55, currentY + 18, { width: 280 });
-                currentY += 8;
-            }
-            subtotal += parseFloat(item.total_price || 0);
-            currentY += 25;
-        });
-        const summaryTop = Math.max(currentY + 20, 600);
-        if (summaryTop > 700) { currentY = addNewPage(doc); } else { currentY = summaryTop; }
-        doc.rect(300, currentY, 245, 90).fill(colors.light).stroke(colors.primary).lineWidth(1);
-        doc.fontSize(11).font('Helvetica-Bold').fillColor(colors.primary).text('FINANCIAL SUMMARY', 310, currentY + 8);
-        doc.fontSize(9).font('Helvetica').fillColor(colors.dark).text('Subtotal:', 310, currentY + 25).text(formatCurrency(subtotal), 430, currentY + 25);
-        if (transaction.discount_amount > 0) {
-            const discountType = transaction.discount_type === 'percentage' ? '%' : '₹';
-            doc.font('Helvetica-Bold').fillColor(colors.accent).text(`Discount (${discountType}):`, 310, currentY + 40).font('Helvetica').fillColor(colors.accent).text(`-${formatCurrency(transaction.discount_amount)}`, 430, currentY + 40);
-        }
-        doc.fontSize(12).font('Helvetica-Bold').fillColor(colors.primary).text('NET TOTAL:', 310, currentY + 60).text(formatCurrency(transaction.total_amount), 430, currentY + 60);
-        currentY += 110;
-        try { if (fs.existsSync(signaturePath)) { doc.image(signaturePath, 400, currentY - 8, { width: 100, height: 35 }); } } catch (error) { console.warn('Signature not loaded:', error.message); }
-        doc.fontSize(8).font('Helvetica-Bold').fillColor(colors.dark).text('Authorized Signature', 400, currentY + 15);
-        currentY += 40;
-        if (currentY > 650) { currentY = addNewPage(doc); }
-        doc.fontSize(8).font('Helvetica').fillColor(colors.gray).text('Thank you for your business!', 50, currentY, { align: 'center' }).text('This is a computer generated invoice.', 50, currentY + 12, { align: 'center' }).text(`Generated on: ${new Date().toLocaleString('en-IN')}`, 50, currentY + 24, { align: 'center' });
-        currentY += 50;
-        if (currentY > 600) { currentY = addNewPage(doc); }
-        doc.fontSize(12).font('Helvetica-Bold').fillColor(colors.primary).text('TERMS & CONDITIONS', 50, currentY);
-        currentY += 20;
-        const terms = ['Goods once sold cannot be returned or exchanged.', 'Please check expiry date and other details at the time of purchase.', 'Prices inclusive of all applicable taxes.', 'Consult doctor before taking medicine.'];
-        terms.forEach((term, index) => {
-            if (currentY > 750) { currentY = addNewPage(doc); currentY += 20; }
-            doc.fontSize(9).font('Helvetica-Bold').fillColor(colors.dark).text(`${index + 1}.`, 50, currentY).font('Helvetica').fillColor(colors.gray).text(term, 65, currentY, { width: 480, align: 'justify' });
-            currentY += 20;
-        });
-        currentY += 20;
-        if (currentY > 750) { currentY = addNewPage(doc); }
-        doc.fontSize(10).font('Helvetica-Bold').fillColor(colors.primary).text('Thank You for Choosing Kiran Care Wellness!', 50, currentY, { align: 'center' }).fontSize(8).font('Helvetica').fillColor(colors.gray).text('We value your trust and look forward to serving you again.', 50, currentY + 15, { align: 'center' });
-        resolve();
     });
 }
 

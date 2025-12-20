@@ -3,7 +3,6 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const db = require('../db');
 const requireAuth = require('../middleware/auth'); 
 const util = require('util'); // For promisifying db.query
@@ -35,7 +34,11 @@ const REQUIRED_FIELDS = [
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         // Destination directory: server/uploads/
-        cb(null, path.join(__dirname, '..', 'uploads/'));
+        const dest = path.join(__dirname, '..', 'uploads/');
+        if (!fs.existsSync(dest)) {
+            fs.mkdirSync(dest, { recursive: true });
+        }
+        cb(null, dest);
     },
     filename: (req, file, cb) => {
         // Use a unique suffix and append the original file extension
@@ -48,71 +51,49 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 
+const { PythonShell } = require('python-shell');
+
 // --- Route for file upload and header extraction ---
-// NOTE: We combine requireAuth and upload.single() in the array of middleware.
 router.post('/extract-headers', [requireAuth, upload.single('template_file')], (req, res) => {
-    // 1. Check if file was uploaded successfully by Multer/Auth
+    // 1. Check if file was uploaded successfully
     if (!req.file) {
         return res.status(400).json({ success: false, error: 'No file uploaded or file upload failed.' });
     }
 
-    // Get the temporary path where Multer stored the file. This now includes the extension.
     const tempFilePath = req.file.path;
-    
-    // --- CRITICAL PATH FIX: Use absolute path with OS separators and enable shell execution ---
-    // 1. Get the absolute path for the Python script.
-    // CORRECTED: Changed 'python' to 'python-services' based on the actual file structure.
     const pythonScriptPath = path.resolve(__dirname, '..', 'python-services', 'extract_headers.py');
+
+    // Configure python-shell options
+    let options = {
+        mode: 'text',
+        pythonPath: 'python', // Default to 'python'. Docker container will use its PATH.
+        pythonOptions: ['-u'], // get print results in real-time
+        scriptPath: path.dirname(pythonScriptPath),
+        args: [tempFilePath]
+    };
     
-    // The tempFilePath from Multer is already using the correct OS separators and now has the extension.
-    const filePath = tempFilePath;
+    // Adjust pythonPath for Linux/Docker if needed, though usually 'python' or 'python3' works if in PATH.
+    // In many Docker images, 'python' is aliased to python3. 
+    // If strict 'python3' is needed on Linux:
+    if (process.platform === 'linux') {
+        options.pythonPath = 'python3';
+    }
 
-    // Log the paths being used to stderr for debugging
-    console.error(`Attempting to run Python script at: ${pythonScriptPath}`);
-    console.error(`Processing file path: ${filePath}`);
-
-
-    // 2. Spawn the Python child process
-    // CRITICAL: Adding { shell: true } forces the command to be executed via the system shell (cmd.exe on Windows),
-    // which is the most reliable way to handle path resolution for executable scripts.
-    const pythonProcess = spawn('python', [pythonScriptPath, filePath], { shell: true });
-
-    let pythonOutput = '';
-    let pythonError = '';
-
-    // Capture standard output (where Python returns JSON)
-    pythonProcess.stdout.on('data', (data) => {
-        pythonOutput += data.toString();
-    });
-
-    // Capture standard error (where Python writes logs/errors)
-    pythonProcess.stderr.on('data', (data) => {
-        pythonError += data.toString();
-    });
-
-    // 3. Handle process close
-    pythonProcess.on('close', (code) => {
-        // Clean up the uploaded file immediately. MUST use the original req.file.path for fs.unlink
+    // Run the Python script
+    PythonShell.run('extract_headers.py', options).then(messages => {
+        // Cleanup file
         fs.unlink(tempFilePath, (err) => {
             if (err) console.error('Error deleting uploaded file:', err);
         });
-
-        if (code !== 0) {
-            // Log the full command and error for severe debugging
-            console.error(`Python script failed with code ${code}. Command: python ${pythonScriptPath} ${filePath}. Stderr: ${pythonError}`);
-            return res.status(500).json({ 
-                success: false, 
-                error: `File processing failed (Python code ${code}). Check server logs for details.`,
-                details: pythonError.substring(0, 500) // Increase error detail for debugging
-            });
-        }
-
+        
+        // messages is an array of strings (stdout lines)
+        // We expect the last line to be our JSON result, or the whole output joined if printed as one block.
+        // Our script prints one JSON block.
         try {
-            // Attempt to parse the JSON output from Python
-            const result = JSON.parse(pythonOutput);
+            const resultString = messages.join(''); 
+            const result = JSON.parse(resultString);
             
             if (result.success) {
-                // SUCCESS: Return the headers and sample values
                 res.json({
                     success: true,
                     headers: result.headers,
@@ -120,34 +101,27 @@ router.post('/extract-headers', [requireAuth, upload.single('template_file')], (
                     message: `Headers extracted successfully from ${result.file_type} file.`
                 });
             } else {
-                // Python script ran but returned a failure status
                 res.status(result.status || 500).json({
                     success: false,
                     error: result.error || 'Unknown error during file processing.'
                 });
             }
         } catch (e) {
-            // JSON parsing failed, likely due to unexpected Python output
-            console.error('Failed to parse Python output as JSON:', e.message, 'Raw Output:', pythonOutput);
-            res.status(500).json({ 
-                success: false, 
-                error: 'Server error: Failed to interpret file analysis result.' 
-            });
+            console.error('Failed to parse Python output:', e, 'Raw:', messages);
+            res.status(500).json({ success: false, error: 'Failed to interpret file analysis result.' });
         }
-    });
-
-    // 4. Handle process spawn error (e.g., python command not found)
-    pythonProcess.on('error', (err) => {
-        // Clean up the uploaded file in case of spawn error
-        fs.unlink(tempFilePath, (unlinkErr) => {
-             if (unlinkErr) console.error('Error deleting file after spawn failure:', unlinkErr);
-        });
         
-        console.error('Failed to spawn python process:', err);
-        // Ensure we send a response immediately to resolve the pending status
+    }).catch(err => {
+        // Cleanup file on error
+        fs.unlink(tempFilePath, (unlinkErr) => {
+             if (unlinkErr) console.error('Error deleting file after script failure:', unlinkErr);
+        });
+
+        console.error('Python script error:', err);
         res.status(500).json({ 
             success: false, 
-            error: 'Server configuration error: Could not run file processing script (Python command not found or path error).' 
+            error: 'File processing failed.',
+            details: err.message 
         });
     });
 });
