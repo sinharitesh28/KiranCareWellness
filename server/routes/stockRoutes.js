@@ -210,37 +210,36 @@ router.post('/process-file', requireAuth, (req, res, next) => {
     });
 });
 
-// Function to check for duplicate stocks
-function checkDuplicateStocks(templateId, invoiceNo, stockDetails, callback) {
-    const duplicateCheckQuery = `
-        SELECT d.item_name, d.batch_number 
-        FROM import_stock_detail d
-        INNER JOIN import_stock_master m ON d.master_id = m.id
-        WHERE m.template_id = ? 
-        AND m.invoice_no = ? 
-        AND d.item_name = ? 
-        AND (d.batch_number = ? OR (d.batch_number IS NULL AND ? IS NULL))
-    `;
+// Function to check for duplicate stocks (Promisified)
+function checkDuplicateStocks(templateId, invoiceNo, stockDetails) {
+    return new Promise((resolve, reject) => {
+        const duplicateCheckQuery = `
+            SELECT d.item_name, d.batch_number 
+            FROM import_stock_detail d
+            INNER JOIN import_stock_master m ON d.master_id = m.id
+            WHERE m.template_id = ? 
+            AND m.invoice_no = ? 
+            AND d.item_name = ? 
+            AND (d.batch_number = ? OR (d.batch_number IS NULL AND ? IS NULL))
+        `;
 
-    const duplicates = [];
-    const uniqueItems = [];
-    let processed = 0;
-
-    if (stockDetails.length === 0) {
-        return callback(null, { duplicates: [], uniqueItems: [] });
-    }
-
-    stockDetails.forEach((item, index) => {
-        const batchNumber = item.batch_number || null;
+        const duplicates = [];
+        const uniqueItems = [];
         
-        db.query(
-            duplicateCheckQuery, 
-            [templateId, invoiceNo, item.item_name, batchNumber, batchNumber],
-            (err, results) => {
-                if (err) {
-                    console.error('Error checking duplicate for item:', item.item_name, err);
-                    uniqueItems.push({ ...item, originalIndex: index });
-                } else if (results.length > 0) {
+        if (stockDetails.length === 0) {
+            return resolve({ duplicates: [], uniqueItems: [] });
+        }
+
+        // Use Promise.all for parallel checking
+        const checks = stockDetails.map(async (item, index) => {
+            const batchNumber = item.batch_number || null;
+            try {
+                const [results] = await db.promise().query(
+                    duplicateCheckQuery, 
+                    [templateId, invoiceNo, item.item_name, batchNumber, batchNumber]
+                );
+                
+                if (results.length > 0) {
                     duplicates.push({
                         item_name: item.item_name,
                         batch_number: item.batch_number,
@@ -250,13 +249,15 @@ function checkDuplicateStocks(templateId, invoiceNo, stockDetails, callback) {
                 } else {
                     uniqueItems.push({ ...item, originalIndex: index });
                 }
-
-                processed++;
-                if (processed === stockDetails.length) {
-                    callback(null, { duplicates, uniqueItems });
-                }
+            } catch (err) {
+                console.error('Error checking duplicate for item:', item.item_name, err);
+                uniqueItems.push({ ...item, originalIndex: index });
             }
-        );
+        });
+
+        Promise.all(checks)
+            .then(() => resolve({ duplicates, uniqueItems }))
+            .catch(reject);
     });
 }
 
@@ -274,13 +275,8 @@ router.post('/import-stocks', requireAuth, async (req, res) => {
         return res.status(400).json({ success: false, error: 'Missing required import data (templateId, masterData, or stockDetails).' });
     }
 
-    const getTemplateSql = 'SELECT * FROM importTemplate WHERE id = ?';
-    
-    db.query(getTemplateSql, [templateId], (templateErr, templateResults) => {
-        if (templateErr) {
-            console.error('Error fetching template:', templateErr);
-            return res.status(500).json({ success: false, error: 'Failed to fetch template configuration.' });
-        }
+    try {
+        const [templateResults] = await db.promise().query('SELECT * FROM importTemplate WHERE id = ?', [templateId]);
 
         if (templateResults.length === 0) {
             return res.status(404).json({ success: false, error: 'Template not found.' });
@@ -288,196 +284,165 @@ router.post('/import-stocks', requireAuth, async (req, res) => {
 
         const template = templateResults[0];
 
-        checkDuplicateStocks(templateId, masterData.invoice_no, stockDetails, (dupErr, duplicateResult) => {
-            if (dupErr) {
-                console.error('Error during duplicate check:', dupErr);
-                return res.status(500).json({ success: false, error: 'Error checking for duplicate items.' });
+        const { duplicates, uniqueItems } = await checkDuplicateStocks(templateId, masterData.invoice_no, stockDetails);
+
+        if (duplicates.length === stockDetails.length) {
+            const duplicateNames = duplicates.map(d => 
+                `${d.item_name}${d.batch_number ? ` (Batch: ${d.batch_number})` : ''}`
+            ).join(', ');
+            
+            return res.status(400).json({
+                success: false, 
+                error: `All items are duplicates and already exist in the system: ${duplicateNames}. No items were imported.` 
+            });
+        }
+
+        if (uniqueItems.length === 0) {
+            return res.status(400).json({
+                success: false, 
+                error: 'No unique items to import after filtering duplicates.' 
+            });
+        }
+
+        // Start Transaction
+        const connection = await db.promise().getConnection();
+        await connection.beginTransaction();
+
+        try {
+            const parsedMasterData = { ...masterData };
+            if (template.invoice_date_format && masterData.invoice_date && masterData.invoice_date !== 'N/A') {
+                parsedMasterData.invoice_date = parseDate(masterData.invoice_date, template.invoice_date_format);
             }
 
-            const { duplicates, uniqueItems } = duplicateResult;
+            // 1. Insert into import_stock_master
+            const masterSql = 'INSERT INTO import_stock_master (template_id, invoice_no, invoice_date, vendor_name, imported_by_user_id) VALUES (?, ?, ?, ?, ?)';
+            const masterValues = [
+                templateId, 
+                parsedMasterData.invoice_no, 
+                parsedMasterData.invoice_date,
+                parsedMasterData.vendor_name, 
+                userId
+            ];
 
-            if (duplicates.length === stockDetails.length) {
+            const [masterResult] = await connection.query(masterSql, masterValues);
+            const masterId = masterResult.insertId;
+
+            // 2. Prepare and insert details
+            const detailSql = `INSERT INTO import_stock_detail 
+                (master_id, item_name, item_desc, manufacturer, hsn_code, batch_number, expiry_date, packing, quantity, free_quantity, rate, mrp, location, barcode, barcode_printed) 
+                VALUES ?`;
+            
+            const detailValues = uniqueItems.map((item, index) => {
+                let parsedExpiryDate = item.expiry_date;
+                if (template.expiry_date_format && item.expiry_date) {
+                    parsedExpiryDate = parseDate(item.expiry_date, template.expiry_date_format);
+                }
+
+                const packingValue = item.packing && typeof item.packing === 'string' 
+                    ? extractPackingValue(item.packing) 
+                    : item.packing;
+
+                const barcode = generateBarcode(
+                    templateId,
+                    item.item_name,
+                    item.batch_number,
+                    parsedExpiryDate
+                );
+
+                return [
+                    masterId,
+                    item.item_name,
+                    item.item_desc || null,
+                    item.manufacturer || null,
+                    item.hsn_code || null,
+                    item.batch_number || null,
+                    parsedExpiryDate,
+                    packingValue,
+                    item.quantity,
+                    item.free_quantity || 0,
+                    item.rate,
+                    item.mrp || null,
+                    item.location,
+                    barcode,
+                    false
+                ];
+            });
+
+            await connection.query(detailSql, [detailValues]);
+
+            await connection.commit();
+
+            let responseMessage = `Stock imported successfully! ${uniqueItems.length} item(s) added with barcodes generated.`;
+            
+            if (duplicates.length > 0) {
                 const duplicateNames = duplicates.map(d => 
                     `${d.item_name}${d.batch_number ? ` (Batch: ${d.batch_number})` : ''}`
                 ).join(', ');
                 
-                return res.status(400).json({ 
-                    success: false, 
-                    error: `All items are duplicates and already exist in the system: ${duplicateNames}. No items were imported.` 
-                });
+                responseMessage += ` ${duplicates.length} duplicate item(s) were skipped: ${duplicateNames}`;
             }
 
-            if (uniqueItems.length === 0) {
-                return res.status(400).json({ 
-                    success: false, 
-                    error: 'No unique items to import after filtering duplicates.' 
-                });
-            }
-
-            db.beginTransaction(err => {
-                if (err) {
-                    console.error('Transaction start error:', err);
-                    return res.status(500).json({ success: false, error: 'Could not start database transaction.' });
-                }
-
-                const parsedMasterData = { ...masterData };
-                if (template.invoice_date_format && masterData.invoice_date && masterData.invoice_date !== 'N/A') {
-                    parsedMasterData.invoice_date = parseDate(masterData.invoice_date, template.invoice_date_format);
-                }
-
-                // 1. Insert into import_stock_master WITH invoice_date
-                const masterSql = 'INSERT INTO import_stock_master (template_id, invoice_no, invoice_date, vendor_name, imported_by_user_id) VALUES (?, ?, ?, ?, ?)';
-                const masterValues = [
-                    templateId, 
-                    parsedMasterData.invoice_no, 
-                    parsedMasterData.invoice_date,
-                    parsedMasterData.vendor_name, 
-                    userId
-                ];
-
-                db.query(masterSql, masterValues, (err, masterResult) => {
-                    if (err) {
-                        return db.rollback(() => {
-                            console.error('DB Error inserting into import_stock_master:', err.message, 'Values:', masterValues);
-                            res.status(500).json({ success: false, error: 'Failed to record stock import transaction (Master).' });
-                        });
-                    }
-
-                    const masterId = masterResult.insertId;
-
-                    // 2. Prepare and insert with ALL data and barcode generation - UPDATED for packing field
-                    const detailSql = `INSERT INTO import_stock_detail 
-                        (master_id, item_name, item_desc, manufacturer, hsn_code, batch_number, expiry_date, packing, quantity, free_quantity, rate, mrp, location, barcode, barcode_printed) 
-                        VALUES ?`;
-                    
-                    const detailValues = uniqueItems.map((item, index) => {
-    // Parse dates using template formats
-    let parsedExpiryDate = item.expiry_date;
-    if (template.expiry_date_format && item.expiry_date) {
-        parsedExpiryDate = parseDate(item.expiry_date, template.expiry_date_format);
-    }
-
-                        // Extract packing value (already done in frontend, but do it again for safety)
-                        const packingValue = item.packing && typeof item.packing === 'string' 
-        ? extractPackingValue(item.packing) 
-        : item.packing; // This will be null if empty/N/A
-
-    // Generate unique barcode for each item
-    const barcode = generateBarcode(
-        templateId,
-        item.item_name,
-        item.batch_number,
-        parsedExpiryDate
-    );
-
-    return [
-        masterId,
-        item.item_name,
-        item.item_desc || null,
-        item.manufacturer || null,
-        item.hsn_code || null,
-        item.batch_number || null,
-        parsedExpiryDate,
-        packingValue, // CHANGED: Can be null now
-        item.quantity,
-        item.free_quantity || 0,
-        item.rate,
-        item.mrp || null,
-        item.location,
-        barcode,
-        false // barcode_printed default false
-    ];
-});
-
-                    db.query(detailSql, [detailValues], (err, detailResult) => {
-                        if (err) {
-                            return db.rollback(() => {
-                                console.error('DB Error inserting into import_stock_detail:', err.message);
-                                console.error('Problematic values:', detailValues);
-                                res.status(500).json({ success: false, error: 'Failed to import stock items (Detail). Check date formats.' });
-                            });
-                        }
-
-                        db.commit(err => {
-                            if (err) {
-                                return db.rollback(() => {
-                                    console.error('Transaction commit error:', err);
-                                    res.status(500).json({ success: false, error: 'Transaction failed to commit.' });
-                                });
-                            }
-
-                            let responseMessage = `Stock imported successfully! ${uniqueItems.length} item(s) added with barcodes generated.`;
-                            
-                            if (duplicates.length > 0) {
-                                const duplicateNames = duplicates.map(d => 
-                                    `${d.item_name}${d.batch_number ? ` (Batch: ${d.batch_number})` : ''}`
-                                ).join(', ');
-                                
-                                responseMessage += ` ${duplicates.length} duplicate item(s) were skipped: ${duplicateNames}`;
-                            }
-
-                            console.log(`Stock import Master ID ${masterId} successfully committed. Imported ${uniqueItems.length} items with barcodes, skipped ${duplicates.length} duplicates.`);
-                            
-                            res.json({ 
-                                success: true, 
-                                message: responseMessage,
-                                masterId: masterId,
-                                importedCount: uniqueItems.length,
-                                skippedCount: duplicates.length,
-                                skippedItems: duplicates.map(d => ({
-                                    item_name: d.item_name,
-                                    batch_number: d.batch_number
-                                }))
-                            });
-                        });
-                    });
-                });
+            console.log(`Stock import Master ID ${masterId} successfully committed. Imported ${uniqueItems.length} items with barcodes, skipped ${duplicates.length} duplicates.`);
+            
+            res.json({
+                success: true, 
+                message: responseMessage,
+                masterId: masterId,
+                importedCount: uniqueItems.length,
+                skippedCount: duplicates.length,
+                skippedItems: duplicates.map(d => ({
+                    item_name: d.item_name,
+                    batch_number: d.batch_number
+                }))
             });
-        });
-    });
+
+        } catch (err) {
+            await connection.rollback();
+            console.error('Transaction error during import:', err);
+            res.status(500).json({ success: false, error: 'Failed to import stock items. ' + err.message });
+        } finally {
+            connection.release();
+        }
+
+    } catch (err) {
+        console.error('Import stock error:', err);
+        res.status(500).json({ success: false, error: 'Internal server error during import.' });
+    }
 });
 
 /**
  * Route to fetch last used locations for items
  */
-router.post('/get-last-locations', requireAuth, (req, res) => {
+router.post('/get-last-locations', requireAuth, async (req, res) => {
     const { itemNames } = req.body;
 
     if (!itemNames || !Array.isArray(itemNames) || itemNames.length === 0) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             success: false, 
             error: 'Item names array is required' 
         });
     }
 
-    // Simpler query using JOIN with derived table
-    const locationQuery = `
-        SELECT latest.item_name, d.location
-        FROM (
-            SELECT d2.item_name, MAX(m2.import_date) as latest_date
-            FROM import_stock_detail d2
-            INNER JOIN import_stock_master m2 ON d2.master_id = m2.id
-            WHERE d2.item_name IN (?)
-            AND d2.location IS NOT NULL 
-            AND d2.location != ''
-            GROUP BY d2.item_name
-        ) AS latest
-        INNER JOIN import_stock_detail d ON d.item_name = latest.item_name
-        INNER JOIN import_stock_master m ON d.master_id = m.id AND m.import_date = latest.latest_date
-        WHERE d.location IS NOT NULL 
-        AND d.location != ''
-    `;
+    try {
+        const locationQuery = `
+            SELECT latest.item_name, d.location
+            FROM (
+                SELECT d2.item_name, MAX(m2.import_date) as latest_date
+                FROM import_stock_detail d2
+                INNER JOIN import_stock_master m2 ON d2.master_id = m2.id
+                WHERE d2.item_name IN (?) 
+                AND d2.location IS NOT NULL 
+                AND d2.location != ''
+                GROUP BY d2.item_name
+            ) AS latest
+            INNER JOIN import_stock_detail d ON d.item_name = latest.item_name
+            INNER JOIN import_stock_master m ON d.master_id = m.id AND m.import_date = latest.latest_date
+            WHERE d.location IS NOT NULL 
+            AND d.location != ''
+        `;
 
-    db.query(locationQuery, [itemNames], (err, results) => {
-        if (err) {
-            console.error('Error fetching last locations:', err);
-            return res.status(500).json({ 
-                success: false, 
-                error: 'Database error while fetching locations' 
-            });
-        }
+        const [results] = await db.promise().query(locationQuery, [itemNames]);
 
-        // Convert results to a simple object mapping
         const locations = {};
         results.forEach(row => {
             locations[row.item_name] = row.location;
@@ -487,34 +452,37 @@ router.post('/get-last-locations', requireAuth, (req, res) => {
             success: true,
             locations: locations
         });
-    });
+    } catch (err) {
+        console.error('Error fetching last locations:', err);
+        res.status(500).json({
+            success: false, 
+            error: 'Database error while fetching locations'
+        });
+    }
 });
 
 // Route to fetch stock sheet data
-router.get('/stock-sheet', requireAuth, (req, res) => {
-    const stockSheetQuery = `
-        SELECT 
-            d.id,
-            d.item_name,
-            d.batch_number,
-            d.expiry_date,
-            d.quantity AS standard_stock,
-            d.loose_quantity AS loose_stock,
-            d.packing,
-            d.mrp,
-            d.rate,
-            m.vendor_name
-        FROM import_stock_detail d
-        LEFT JOIN import_stock_master m ON d.master_id = m.id
-        WHERE d.quantity > 0 OR d.loose_quantity > 0
-        ORDER BY d.item_name ASC, d.expiry_date ASC
-    `;
+router.get('/stock-sheet', requireAuth, async (req, res) => {
+    try {
+        const stockSheetQuery = `
+            SELECT 
+                d.id,
+                d.item_name,
+                d.batch_number,
+                d.expiry_date,
+                d.quantity AS standard_stock,
+                d.loose_quantity AS loose_stock,
+                d.packing,
+                d.mrp,
+                d.rate,
+                m.vendor_name
+            FROM import_stock_detail d
+            LEFT JOIN import_stock_master m ON d.master_id = m.id
+            WHERE d.quantity > 0 OR d.loose_quantity > 0
+            ORDER BY d.item_name ASC, d.expiry_date ASC
+        `;
 
-    db.query(stockSheetQuery, (err, results) => {
-        if (err) {
-            console.error('Error fetching stock sheet data:', err);
-            return res.status(500).json({ success: false, error: 'Database error fetching stock sheet.' });
-        }
+        const [results] = await db.promise().query(stockSheetQuery);
 
         // Process results to calculate value and format dates
         const processedResults = results.map(item => {
@@ -535,7 +503,10 @@ router.get('/stock-sheet', requireAuth, (req, res) => {
             success: true,
             data: processedResults
         });
-    });
+    } catch (err) {
+        console.error('Error fetching stock sheet data:', err);
+        res.status(500).json({ success: false, error: 'Database error fetching stock sheet.' });
+    }
 });
 
 module.exports = router;
