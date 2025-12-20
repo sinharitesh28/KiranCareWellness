@@ -1,4 +1,4 @@
-// ImportTemplate.js - Updated with date format validation workflow
+// ImportTemplate.js - Updated with edit and delete functionality
 // Updated required fields configuration with systematic sequencing
 const REQUIRED_FIELDS = [
     // Basic Information
@@ -33,12 +33,13 @@ let globalHeaders = [];
 let sampleValues = {};
 let finalTemplateData = {}; // To hold template data after initial check but before final save
 let dateColumnsToValidate = []; // To hold the list of date columns that were mapped by the user
+let isEditing = false; // Flag to track if we are in edit mode
 
 // --- Utility Functions (showMessage) ---
 
 function showMessage(title, message, type = 'info') {
     // Determine color classes based on message type
-    let bgColor, borderColor;
+    let bgColor, borderColor, textColor;
     switch (type) {
         case 'success':
             bgColor = 'bg-green-100';
@@ -76,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     renderMappingSection();
     addTemplateNamePreview();
+    fetchSavedTemplates(); // Load saved templates on startup
 });
 
 function initializeEventListeners() {
@@ -86,6 +88,10 @@ function initializeEventListeners() {
     document.getElementById('startValidationButton').addEventListener('click', startDateFormatValidation);
     document.getElementById('validateFormatButton').addEventListener('click', validateDateFormats);
     document.getElementById('saveTemplateFinalButton').addEventListener('click', saveTemplate);
+    
+    // Update button (hidden by default)
+    document.getElementById('updateTemplateButton').addEventListener('click', startDateFormatValidation);
+    document.getElementById('updateTemplateFinalButton').addEventListener('click', updateTemplate);
 }
 
 // --- UI Rendering Functions ---
@@ -134,6 +140,8 @@ function updateDropdowns(headers) {
     REQUIRED_FIELDS.forEach(field => {
         const select = document.getElementById(field.id);
         if (select) {
+            const currentValue = select.value; // Preserve current value if any
+            
             // Clear existing options
             select.innerHTML = '';
             
@@ -150,6 +158,11 @@ function updateDropdowns(headers) {
                 option.textContent = header;
                 select.appendChild(option);
             });
+            
+            // Restore value if it exists in new headers
+            if (headers.includes(currentValue)) {
+                select.value = currentValue;
+            }
         }
     });
 
@@ -197,8 +210,10 @@ async function handleFileExtraction() {
             updateDropdowns(globalHeaders);
             showMessage('Success', 'Headers extracted and dropdowns updated!', 'success');
             
-            // Update template name preview based on the new sample values
-            updateTemplateNamePreview(); 
+            // Update template name preview only if creating new
+            if (!isEditing) {
+                updateTemplateNamePreview(); 
+            }
         } else {
             showMessage('Error', result.error || 'Failed to extract headers.', 'error');
         }
@@ -265,13 +280,16 @@ function startDateFormatValidation(event) {
     const formatSection = document.getElementById('dateFormatValidationSection');
     const dateFieldsContainer = document.getElementById('dateFieldsContainer');
     const startButton = document.getElementById('startValidationButton');
+    const updateButton = document.getElementById('updateTemplateButton');
     const finalSaveButton = document.getElementById('saveTemplateFinalButton');
+    const finalUpdateButton = document.getElementById('updateTemplateFinalButton');
     const validationError = document.getElementById('formatValidationError');
     const validateButton = document.getElementById('validateFormatButton');
 
     // Reset visibility and state
     validationError.classList.add('hidden');
     finalSaveButton.classList.add('hidden');
+    finalUpdateButton.classList.add('hidden');
     validateButton.classList.remove('hidden');
     dateFieldsContainer.innerHTML = '';
     dateColumnsToValidate = []; // Clear previous list
@@ -282,12 +300,12 @@ function startDateFormatValidation(event) {
 
 
     // Collect all form data (excluding file)
-const formData = new FormData(document.getElementById('templateForm'));
-const templateData = {};
-for (const [key, value] of formData.entries()) {
-    // Only trim if value is a string, otherwise keep as-is
-    templateData[key] = (typeof value === 'string') ? value.trim() : value;
-}
+    const formData = new FormData(document.getElementById('templateForm'));
+    const templateData = {};
+    for (const [key, value] of formData.entries()) {
+        // Only trim if value is a string, otherwise keep as-is
+        templateData[key] = (typeof value === 'string') ? value.trim() : value;
+    }
     
     // Store data for final save
     finalTemplateData = templateData;
@@ -305,18 +323,23 @@ for (const [key, value] of formData.entries()) {
         }
     });
 
-    // 3. If no date fields are mapped, skip this step and proceed to final save
+    // 3. If no date fields are mapped, skip this step and proceed to final save/update
     if (dateColumnsToValidate.length === 0) {
         showMessage('Template Ready', 'No date fields mapped. Saving template...', 'info');
-        saveTemplate(); 
+        if (isEditing) {
+            updateTemplate();
+        } else {
+            saveTemplate();
+        }
         return;
     }
 
     // 4. Generate dynamic inputs and show section
     generateDateFieldInputs(dateColumnsToValidate, dateFieldsContainer);
 
-    // Hide initial save button, show validation section
+    // Hide initial save/update button, show validation section
     startButton.classList.add('hidden');
+    updateButton.classList.add('hidden');
     formatSection.classList.remove('hidden');
     
     // Scroll to the validation section
@@ -325,6 +348,17 @@ for (const [key, value] of formData.entries()) {
 
 function generateDateFieldInputs(fields, containerElement) {
     fields.forEach(field => {
+        // If editing, try to pre-fill the format from the existing template data (which is in finalTemplateData or should be passed)
+        // Since finalTemplateData is fresh from form, format fields won't be there yet unless we populated form inputs for them.
+        // We need to fetch the existing format if editing.
+        // Actually, let's assume we populated hidden fields or handle it here.
+        // Ideally, if editing, the user might want to change it.
+        
+        let existingFormat = '';
+        if (isEditing && window.currentTemplate) {
+            existingFormat = window.currentTemplate[field.formatId] || '';
+        }
+
         const html = `
             <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-sm">
                 <label class="block text-sm font-medium text-gray-700 mb-1">${field.label} Format</label>
@@ -336,7 +370,7 @@ function generateDateFieldInputs(fields, containerElement) {
                     <div class="sm:w-1/2">
                         <label for="${field.formatId}" class="block text-xs font-medium text-gray-700">MySQL Format String (e.g., %d/%m/%Y):</label>
                         <input type="text" id="${field.formatId}" name="${field.formatId}" 
-                               value="" placeholder="e.g., %d/%m/%Y" 
+                               value="${existingFormat}" placeholder="e.g., %d/%m/%Y" 
                                class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-primary focus:border-primary">
                     </div>
                 </div>
@@ -351,11 +385,13 @@ function generateDateFieldInputs(fields, containerElement) {
 async function validateDateFormats() {
     const validationError = document.getElementById('formatValidationError');
     const finalSaveButton = document.getElementById('saveTemplateFinalButton');
+    const finalUpdateButton = document.getElementById('updateTemplateFinalButton');
     const validateButton = document.getElementById('validateFormatButton');
     
     // Reset state
     validationError.classList.add('hidden');
     finalSaveButton.classList.add('hidden');
+    finalUpdateButton.classList.add('hidden');
     document.querySelectorAll('[id$="_error"]').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('[id$="_success"]').forEach(el => el.classList.add('hidden'));
 
@@ -406,9 +442,14 @@ async function validateDateFormats() {
         const result = await response.json();
 
         if (response.ok && result.success) {
-            showMessage('Validation Success', 'All date formats are valid! Click "Confirm & Save Template" to finalize.', 'success');
+            showMessage('Validation Success', 'All date formats are valid! Click "Confirm" to finalize.', 'success');
             validateButton.classList.add('hidden');
-            finalSaveButton.classList.remove('hidden');
+            
+            if (isEditing) {
+                finalUpdateButton.classList.remove('hidden');
+            } else {
+                finalSaveButton.classList.remove('hidden');
+            }
             
             // Show success messages for each field
             result.validated_fields.forEach(fieldId => {
@@ -436,7 +477,8 @@ async function validateDateFormats() {
     } finally {
         validateButton.disabled = false;
         validateButton.textContent = 'Validate Date Format';
-        if (finalSaveButton.classList.contains('hidden')) {
+        // Restore button visibility logic handled in success block above
+        if (finalSaveButton.classList.contains('hidden') && finalUpdateButton.classList.contains('hidden')) {
              validateButton.classList.remove('hidden');
         }
     }
@@ -444,48 +486,56 @@ async function validateDateFormats() {
 
 // Final template saving function (called after successful date validation)
 async function saveTemplate() {
-
-// Clean up finalTemplateData - ensure all string values are trimmed
-Object.keys(finalTemplateData).forEach(key => {
-    if (typeof finalTemplateData[key] === 'string') {
-        finalTemplateData[key] = finalTemplateData[key].trim();
-    }
-});
-
-// Ensure finalTemplateData is populated (should be from startDateFormatValidation and validateDateFormats)
-if (Object.keys(finalTemplateData).length === 0) {
-    showMessage('Error', 'Template data missing. Please map headers and re-run validation.', 'error');
-    return;
+    processTemplateSave('/api/template/save-template', 'POST');
 }
+
+async function updateTemplate() {
+    const templateId = document.getElementById('editing_template_id').value;
+    processTemplateSave(`/api/template/update-template/${templateId}`, 'PUT');
+}
+
+async function processTemplateSave(url, method) {
+    // Clean up finalTemplateData - ensure all string values are trimmed
+    Object.keys(finalTemplateData).forEach(key => {
+        if (typeof finalTemplateData[key] === 'string') {
+            finalTemplateData[key] = finalTemplateData[key].trim();
+        }
+    });
+
+    // Ensure finalTemplateData is populated
+    if (Object.keys(finalTemplateData).length === 0) {
+        showMessage('Error', 'Template data missing. Please map headers and re-run validation.', 'error');
+        return;
+    }
+
     const startButton = document.getElementById('startValidationButton');
+    const updateButton = document.getElementById('updateTemplateButton');
     const finalSaveButton = document.getElementById('saveTemplateFinalButton');
+    const finalUpdateButton = document.getElementById('updateTemplateFinalButton');
     const validationSection = document.getElementById('dateFormatValidationSection');
     const validationError = document.getElementById('formatValidationError');
 
-    finalSaveButton.disabled = true;
-    finalSaveButton.textContent = 'Saving...';
+    // Disable active button
+    const activeBtn = method === 'PUT' ? finalUpdateButton : finalSaveButton;
+    activeBtn.disabled = true;
+    activeBtn.textContent = 'Saving...';
     validationError.classList.add('hidden');
 
-
     try {
-        // Use the combined data (form data + validated formats)
-        const response = await fetch('/api/template/save-template', {
-            method: 'POST',
+        const response = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(finalTemplateData) // Send the full payload with formats
+            body: JSON.stringify(finalTemplateData)
         });
 
         const result = await response.json();
 
         if (response.ok && result.success) {
-            showMessage('Success', `Template "${result.templateName}" saved successfully!`, 'success');
+            showMessage('Success', result.message || 'Template saved successfully!', 'success');
             
             // Cleanup UI
-            document.getElementById('templateForm').reset();
             resetForm(); 
-            // Hide the validation section and show the start button
-            validationSection.classList.add('hidden');
-            startButton.classList.remove('hidden');
+            fetchSavedTemplates(); // Refresh the list
 
         } else {
             validationError.textContent = result.error || 'Failed to save template. Check server logs.';
@@ -497,26 +547,38 @@ if (Object.keys(finalTemplateData).length === 0) {
         console.error('Save fetch error:', error);
         showMessage('Network Error', 'A network error occurred while saving the template.', 'error');
     } finally {
-        finalSaveButton.disabled = false;
-        finalSaveButton.textContent = 'Confirm & Save Template';
+        activeBtn.disabled = false;
+        activeBtn.textContent = method === 'PUT' ? 'Confirm & Update Template' : 'Confirm & Save Template';
     }
 }
 
 
-// --- Reset and Preview (modified resetForm to hide the validation section) ---
+// --- Reset and Preview ---
 
 // Resets the form and hides dynamic sections
 function resetForm() {
+    document.getElementById('templateForm').reset();
+    
     globalHeaders = [];
     sampleValues = {};
     finalTemplateData = {};
     dateColumnsToValidate = [];
+    isEditing = false;
+    window.currentTemplate = null;
     
     // Hide sections
     document.getElementById('mappingSection').classList.add('hidden');
     document.getElementById('templateNamingSection').classList.add('hidden');
     document.getElementById('initialActionButtons').classList.add('hidden');
     document.getElementById('dateFormatValidationSection').classList.add('hidden');
+    document.getElementById('editingBadge').classList.add('hidden');
+    
+    // Reset Buttons
+    document.getElementById('startValidationButton').classList.remove('hidden');
+    document.getElementById('updateTemplateButton').classList.add('hidden');
+    document.getElementById('saveTemplateFinalButton').classList.add('hidden');
+    document.getElementById('updateTemplateFinalButton').classList.add('hidden');
+    document.getElementById('validateFormatButton').classList.remove('hidden');
     
     // Clear dynamic content
     document.getElementById('templateNamePreview').textContent = '';
@@ -528,6 +590,9 @@ function resetForm() {
     
     // Reset the initial extract button's error display
     document.getElementById('templateFileError').classList.add('hidden');
+    
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     showMessage('Form Reset', 'The form has been cleared and reset.', 'info');
 }
@@ -539,6 +604,8 @@ function addTemplateNamePreview() {
 
     // Add listeners to update the template name input based on the Vendor column value
     const updatePreview = () => {
+        if (isEditing) return; // Don't auto-update name if editing
+
         const vendorHeaderName = vendorDetailDropdown.value.trim();
         let previewName = 'Unnamed Template';
         
@@ -568,6 +635,8 @@ function addTemplateNamePreview() {
 }
 
 function updateTemplateNamePreview() {
+    if (isEditing) return;
+
     const vendorHeaderName = document.getElementById('vendor_detail_col').value.trim();
     const templateNameInput = document.getElementById('template_name');
     let previewName = 'Unnamed Template';
@@ -585,12 +654,160 @@ function updateTemplateNamePreview() {
     const previewElement = document.getElementById('templateNamePreview');
     if (previewElement) {
         previewElement.textContent = `Suggested name based on mapped vendor value: ${previewName}`;
-    } else {
-        console.log('Template name preview:', previewName);
     }
 }
 
-// Initialize template name preview when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    addTemplateNamePreview();
-});
+// --- Fetch and Display Saved Templates ---
+
+async function fetchSavedTemplates() {
+    const container = document.getElementById('savedTemplatesList');
+    container.innerHTML = '<p class="text-gray-500 text-center py-4">Loading templates...</p>';
+
+    try {
+        const response = await fetch('/api/template/get-templates');
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            renderSavedTemplates(result.templates);
+        } else {
+            container.innerHTML = '<p class="text-red-500 text-center py-4">Failed to load templates.</p>';
+        }
+    } catch (error) {
+        console.error('Fetch templates error:', error);
+        container.innerHTML = '<p class="text-red-500 text-center py-4">Network error loading templates.</p>';
+    }
+}
+
+function renderSavedTemplates(templates) {
+    const container = document.getElementById('savedTemplatesList');
+    
+    if (!templates || templates.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">No saved templates found.</p>';
+        return;
+    }
+
+    container.innerHTML = ''; // Clear loading
+
+    templates.forEach(template => {
+        const item = document.createElement('div');
+        item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-md transition';
+        
+        item.innerHTML = `
+            <div>
+                <h3 class="font-bold text-gray-800 text-lg">${template.template_name}</h3>
+                <p class="text-xs text-gray-500">ID: ${template.id} | Vendor Col: ${template.vendor_detail_col}</p>
+            </div>
+            <div class="mt-3 sm:mt-0 flex space-x-2">
+                <button class="edit-btn bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded text-sm font-medium transition" data-id="${template.id}">
+                    <i class="fas fa-edit mr-1"></i> Edit
+                </button>
+                <button class="delete-btn bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded text-sm font-medium transition" data-id="${template.id}">
+                    <i class="fas fa-trash-alt mr-1"></i> Delete
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(item);
+    });
+
+    // Add event listeners
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => deleteTemplate(e.target.closest('button').dataset.id));
+    });
+
+    document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => loadTemplateForEdit(e.target.closest('button').dataset.id));
+    });
+}
+
+async function deleteTemplate(id) {
+    if (!confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/template/delete-template/${id}`, {
+            method: 'DELETE'
+        });
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showMessage('Deleted', 'Template deleted successfully.', 'success');
+            fetchSavedTemplates();
+            // If deleting the currently editing template, reset form
+            if (isEditing && document.getElementById('editing_template_id').value == id) {
+                resetForm();
+            }
+        } else {
+            showMessage('Error', result.error || 'Failed to delete template.', 'error');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        showMessage('Error', 'Network error while deleting template.', 'error');
+    }
+}
+
+async function loadTemplateForEdit(id) {
+    try {
+        const response = await fetch(`/api/template/get-template/${id}`);
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            const template = result.template;
+            
+            // Set edit mode
+            isEditing = true;
+            window.currentTemplate = template; // Store for format retrieval
+            document.getElementById('editing_template_id').value = template.id;
+            document.getElementById('editingBadge').classList.remove('hidden');
+            
+            // Populate basic fields
+            document.getElementById('template_name').value = template.template_name;
+            
+            // Show necessary sections (even without file upload)
+            document.getElementById('templateNamingSection').classList.remove('hidden');
+            document.getElementById('mappingSection').classList.remove('hidden');
+            document.getElementById('initialActionButtons').classList.remove('hidden');
+            document.getElementById('dateFormatValidationSection').classList.add('hidden'); // Hide until validation
+            
+            // Hide extract button error
+            document.getElementById('templateFileError').classList.add('hidden');
+
+            // Switch buttons
+            document.getElementById('startValidationButton').classList.add('hidden');
+            document.getElementById('updateTemplateButton').classList.remove('hidden');
+
+            // Populate dropdowns with *current values* as options (since we don't have the file anymore)
+            // Ideally, we'd have the headers, but we don't store raw headers separate from mapping.
+            // We'll create options based on the mapped values so they show up.
+            
+            // Collect all unique mapped values
+            const mappedValues = new Set();
+            REQUIRED_FIELDS.forEach(field => {
+                if (template[field.id]) mappedValues.add(template[field.id]);
+            });
+            
+            // Update dropdowns with these values
+            updateDropdowns(Array.from(mappedValues));
+            
+            // Set selected values
+            REQUIRED_FIELDS.forEach(field => {
+                const select = document.getElementById(field.id);
+                if (select && template[field.id]) {
+                    select.value = template[field.id];
+                }
+            });
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            showMessage('Edit Mode', `Editing template: ${template.template_name}. NOTE: Since the original file is not stored, dropdowns only show previously mapped columns. Upload a file to see all columns.`, 'info');
+
+        } else {
+            showMessage('Error', 'Failed to load template details.', 'error');
+        }
+    } catch (error) {
+        console.error('Load edit error:', error);
+        showMessage('Error', 'Network error loading template.', 'error');
+    }
+}

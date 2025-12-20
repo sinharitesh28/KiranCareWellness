@@ -28,20 +28,30 @@
     </script>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="/css/ImportTemplate.css">
 </head>
 <body class="bg-tertiary font-sans min-h-screen p-4 sm:p-8 flex justify-center items-start">
 
-    <div class="w-full max-w-4xl">
+    <div class="w-full max-w-4xl space-y-8">
         
         <!-- Header -->
         <header class="text-center mb-10">
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-primary mb-2">Import Template Creator</h1>
+            <div class="flex items-center justify-center mb-4 relative">
+                <a href="/index.html" class="absolute left-0 text-gray-500 hover:text-primary transition">
+                    <i class="fas fa-arrow-left text-2xl"></i>
+                </a>
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-primary">Import Template Creator</h1>
+            </div>
             <p class="text-lg text-gray-600">Map your Excel/CSV columns to database fields for easy stock import.</p>
         </header>
 
         <!-- Main Form Container -->
-        <form id="templateForm" class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl border border-primary/10">
+        <form id="templateForm" class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl border border-primary/10 relative">
+            <input type="hidden" id="editing_template_id" name="editing_template_id" value="">
+            <div class="absolute top-4 right-4 hidden" id="editingBadge">
+                <span class="bg-quarterly text-white text-xs font-bold px-2 py-1 rounded shadow-sm">EDITING MODE</span>
+            </div>
 
             <!-- Step 1: File Upload & Header Extraction -->
             <div class="mb-8">
@@ -83,8 +93,11 @@
                 <button type="button" id="startValidationButton" class="bg-primary text-white font-semibold py-3 px-8 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md mr-4">
                     Save Template
                 </button>
+                <button type="button" id="updateTemplateButton" class="bg-primary text-white font-semibold py-3 px-8 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md mr-4 hidden">
+                    Update Template
+                </button>
                 <button type="button" id="resetFormButton" class="bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg hover:bg-gray-500 transition duration-150 shadow-md" onclick="resetForm()">
-                    Reset
+                    Cancel
                 </button>
             </div>
 
@@ -107,11 +120,22 @@
                     <button type="button" id="saveTemplateFinalButton" class="bg-primary text-white font-semibold py-2 px-6 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md hidden">
                         Confirm & Save Template
                     </button>
+                    <button type="button" id="updateTemplateFinalButton" class="bg-primary text-white font-semibold py-2 px-6 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md hidden">
+                        Confirm & Update Template
+                    </button>
                 </div>
                 <p id="formatValidationError" class="text-sm text-red-500 mt-3 hidden"></p>
             </div>
 
         </form>
+
+        <!-- Saved Templates Section -->
+        <section class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-gray-200">
+            <h2 class="text-xl font-bold text-primary mb-4 border-b pb-2">Saved Templates</h2>
+            <div id="savedTemplatesList" class="space-y-3">
+                <p class="text-gray-500 text-center py-4">Loading templates...</p>
+            </div>
+        </section>
 
     </div>
 

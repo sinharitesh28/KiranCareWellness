@@ -283,6 +283,89 @@ router.post('/save-template', requireAuth, (req, res) => {
     }
 });
 
+// Update template
+router.put('/update-template/:id', requireAuth, (req, res) => {
+    try {
+        const templateId = req.params.id;
+        const templateData = req.body;
+
+        const allowedColumns = [
+            'template_name', 'vendor_detail_col', 'invoice_no_col', 'invoice_date_col', 
+            'invoice_date_format',
+            'item_name_col', 'item_desc_col', 'manufacturer_col', 'batch_number_col', 
+            'hsn_code_col', 'quantity_col', 'free_col', 'rate_col', 'mrp_col', 
+            'packing_col',
+            'expiry_date_col',
+            'expiry_date_format'
+        ];
+
+        let updates = [];
+        let values = [];
+
+        allowedColumns.forEach(col => {
+            const rawValue = templateData[col];
+            // Only update fields that are explicitly provided in the request
+            if (rawValue !== undefined) {
+                const value = typeof rawValue === 'string' ? (rawValue.trim() || null) : rawValue;
+                updates.push(`${col} = ?`);
+                values.push(value);
+            }
+        });
+
+        if (updates.length === 0) {
+            return res.status(400).json({ success: false, error: 'No fields to update.' });
+        }
+
+        values.push(templateId);
+        const updateQuery = `UPDATE importTemplate SET ${updates.join(', ')} WHERE id = ?`;
+
+        db.query(updateQuery, values, (err, result) => {
+            if (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ success: false, error: 'Template name already exists.' });
+                }
+                console.error('Error updating template:', err);
+                return res.status(500).json({ success: false, error: 'Database error updating template.' });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ success: false, error: 'Template not found.' });
+            }
+
+            res.json({ success: true, message: 'Template updated successfully.' });
+        });
+
+    } catch (error) {
+        console.error('Error in update-template route:', error);
+        res.status(500).json({ success: false, error: 'Server error updating template.' });
+    }
+});
+
+// Delete template
+router.delete('/delete-template/:id', requireAuth, (req, res) => {
+    try {
+        const templateId = req.params.id;
+        const deleteQuery = 'DELETE FROM importTemplate WHERE id = ?';
+
+        db.query(deleteQuery, [templateId], (err, result) => {
+            if (err) {
+                console.error('Error deleting template:', err);
+                return res.status(500).json({ success: false, error: 'Database error deleting template.' });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ success: false, error: 'Template not found.' });
+            }
+
+            res.json({ success: true, message: 'Template deleted successfully.' });
+        });
+
+    } catch (error) {
+        console.error('Error in delete-template route:', error);
+        res.status(500).json({ success: false, error: 'Server error deleting template.' });
+    }
+});
+
 
 // --- Other Routes (unchanged) ---
 
@@ -291,7 +374,7 @@ router.post('/save-template', requireAuth, (req, res) => {
 router.get('/get-templates', requireAuth, async (req, res) => {
     try {
         // Select ALL columns including column mappings
-        const query = 'SELECT * FROM importTemplate';
+        const query = 'SELECT * FROM importTemplate ORDER BY id DESC';
         
         db.query(query, (err, results) => {
             if (err) {
