@@ -6,7 +6,7 @@ const requireAuth = require('../middleware/auth');
 const router = express.Router();
 
 // Generate barcode for existing stock
-router.post('/generate-for-stock', requireAuth, (req, res) => {
+router.post('/generate-for-stock', requireAuth, async (req, res) => {
     const { stockDetailId } = req.body;
     const userId = req.session.code;
 
@@ -21,11 +21,8 @@ router.post('/generate-for-stock', requireAuth, (req, res) => {
         WHERE isd.id = ?
     `;
 
-    db.query(getStockSql, [stockDetailId], (err, results) => {
-        if (err) {
-            console.error('Error fetching stock detail:', err);
-            return res.status(500).json({ success: false, error: 'Database error fetching stock detail.' });
-        }
+    try {
+        const [results] = await db.promise().query(getStockSql, [stockDetailId]);
 
         if (results.length === 0) {
             return res.status(404).json({ success: false, error: 'Stock item not found.' });
@@ -50,23 +47,22 @@ router.post('/generate-for-stock', requireAuth, (req, res) => {
 
         const updateSql = 'UPDATE import_stock_detail SET barcode = ?, barcode_printed = FALSE WHERE id = ?';
         
-        db.query(updateSql, [newBarcode, stockDetailId], (updateErr) => {
-            if (updateErr) {
-                console.error('Error updating barcode:', updateErr);
-                return res.status(500).json({ success: false, error: 'Failed to generate barcode.' });
-            }
+        await db.promise().query(updateSql, [newBarcode, stockDetailId]);
 
-            res.json({
-                success: true,
-                barcode: newBarcode,
-                message: 'Barcode generated successfully.'
-            });
+        res.json({
+            success: true,
+            barcode: newBarcode,
+            message: 'Barcode generated successfully.'
         });
-    });
+
+    } catch (error) {
+        console.error('Error generating barcode:', error);
+        res.status(500).json({ success: false, error: 'Database error.' });
+    }
 });
 
 // Print barcode (log the print event)
-router.post('/log-print', requireAuth, (req, res) => {
+router.post('/log-print', requireAuth, async (req, res) => {
     const { stockDetailIds, printReason } = req.body;
     const userId = req.session.code;
 
@@ -74,51 +70,42 @@ router.post('/log-print', requireAuth, (req, res) => {
         return res.status(400).json({ success: false, error: 'Stock detail IDs are required.' });
     }
 
-    db.beginTransaction(err => {
-        if (err) {
-            return res.status(500).json({ success: false, error: 'Could not start transaction.' });
-        }
+    let connection;
+    try {
+        connection = await db.promise().getConnection();
+        await connection.beginTransaction();
 
         const updateSql = 'UPDATE import_stock_detail SET barcode_printed = TRUE WHERE id IN (?)';
-        db.query(updateSql, [stockDetailIds], (updateErr) => {
-            if (updateErr) {
-                return db.rollback(() => {
-                    console.error('Error updating print status:', updateErr);
-                    res.status(500).json({ success: false, error: 'Failed to update print status.' });
-                });
-            }
+        // Note: mysql2 handles array parameters for IN clause correctly
+        await connection.query(updateSql, [stockDetailIds]);
 
-            const logValues = stockDetailIds.map(id => [id, userId, printReason || 'reprint', 1]);
-            const logSql = 'INSERT INTO barcode_print_log (stock_detail_id, printed_by_user_id, print_reason, print_count) VALUES ?';
-            
-            db.query(logSql, [logValues], (logErr) => {
-                if (logErr) {
-                    return db.rollback(() => {
-                        console.error('Error logging print event:', logErr);
-                        res.status(500).json({ success: false, error: 'Failed to log print event.' });
-                    });
-                }
+        const logValues = stockDetailIds.map(id => [id, userId, printReason || 'reprint', 1]);
+        const logSql = 'INSERT INTO barcode_print_log (stock_detail_id, printed_by_user_id, print_reason, print_count) VALUES ?';
+        
+        await connection.query(logSql, [logValues]);
 
-                db.commit(commitErr => {
-                    if (commitErr) {
-                        return db.rollback(() => {
-                            console.error('Transaction commit error:', commitErr);
-                            res.status(500).json({ success: false, error: 'Transaction failed.' });
-                        });
-                    }
+        await connection.commit();
 
-                    res.json({
-                        success: true,
-                        message: `Barcodes printed successfully for ${stockDetailIds.length} items.`
-                    });
-                });
-            });
+        res.json({
+            success: true,
+            message: `Barcodes printed successfully for ${stockDetailIds.length} items.`
         });
-    });
+
+    } catch (error) {
+        if (connection) {
+            await connection.rollback();
+        }
+        console.error('Error logging print event:', error);
+        res.status(500).json({ success: false, error: 'Failed to log print event: ' + error.message });
+    } finally {
+        if (connection) {
+            connection.release();
+        }
+    }
 });
 
 // Get stock items for barcode printing
-router.get('/stock-items', requireAuth, (req, res) => {
+router.get('/stock-items', requireAuth, async (req, res) => {
     const { search, batch, location, printed } = req.query;
     
     let sql = `
@@ -163,47 +150,39 @@ router.get('/stock-items', requireAuth, (req, res) => {
 
     sql += ' ORDER BY isd.id DESC LIMIT 100';
 
-    db.query(sql, params, (err, results) => {
-        if (err) {
-            console.error('Error fetching stock items:', err);
-            return res.status(500).json({ success: false, error: 'Database error fetching stock items.' });
-        }
-
+    try {
+        const [results] = await db.promise().query(sql, params);
         res.json({
             success: true,
             items: results,
             total: results.length
         });
-    });
+    } catch (error) {
+        console.error('Error fetching stock items:', error);
+        res.status(500).json({ success: false, error: 'Database error fetching stock items.' });
+    }
 });
 
-router.get('/search-by-barcode', requireAuth, (req, res) => {
+router.get('/search-by-barcode', requireAuth, async (req, res) => {
     const { barcode } = req.query;
     
     if (!barcode) {
         return res.status(400).json({ success: false, error: 'Barcode is required' });
     }
 
-    console.log('Searching for barcode:', barcode);
-
     const sql = `
         SELECT 
             id, item_name, item_desc, mrp, 
             COALESCE(rate, mrp) as rate, 
             quantity, location, barcode,
-            batch_no, expiry_date, manufacturer
+            batch_number, expiry_date, manufacturer
         FROM import_stock_detail 
         WHERE barcode = ? AND quantity > 0
         LIMIT 1
     `;
 
-    db.query(sql, [barcode], (err, results) => {
-        if (err) {
-            console.error('Database error searching by barcode:', err);
-            return res.status(500).json({ success: false, error: 'Database error' });
-        }
-
-        console.log('Barcode search results:', results);
+    try {
+        const [results] = await db.promise().query(sql, [barcode]);
 
         if (results.length > 0) {
             res.json({ 
@@ -219,11 +198,14 @@ router.get('/search-by-barcode', requireAuth, (req, res) => {
                 message: 'No medicine found with this barcode'
             });
         }
-    });
+    } catch (error) {
+        console.error('Database error searching by barcode:', error);
+        res.status(500).json({ success: false, error: 'Database error' });
+    }
 });
 
 
-router.get('/last-imports', requireAuth, (req, res) => {
+router.get('/last-imports', requireAuth, async (req, res) => {
     const sql = `
         SELECT 
             ism.id,
@@ -238,17 +220,16 @@ router.get('/last-imports', requireAuth, (req, res) => {
         LIMIT 20
     `;
 
-    db.query(sql, (err, results) => {
-        if (err) {
-            console.error('Error fetching last imports:', err);
-            return res.status(500).json({ success: false, error: 'Database error fetching last imports.' });
-        }
-
+    try {
+        const [results] = await db.promise().query(sql);
         res.json({
             success: true,
             imports: results
         });
-    });
+    } catch (error) {
+        console.error('Error fetching last imports:', error);
+        res.status(500).json({ success: false, error: 'Database error fetching last imports.' });
+    }
 });
 
 module.exports = router;

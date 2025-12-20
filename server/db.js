@@ -140,13 +140,19 @@ CREATE TABLE IF NOT EXISTS import_stock_detail (
         else console.log('import_stock_detail table checked/created.');
     });
 
-    db.query(createBarcodePrintLogTable, (err) => {
-        if (err) console.error('Error creating barcode_print_log table:', err.message);
-        else console.log('barcode_print_log table checked/created.');
-    });
+        db.query(createBarcodePrintLogTable, (err) => {
 
-    // Add missing columns after a delay to ensure tables are created
-    setTimeout(() => {
+            if (err) console.error('Error creating barcode_print_log table:', err.message);
+
+            else console.log('barcode_print_log table checked/created.');
+
+        });
+
+    
+
+        // Add missing columns after a delay to ensure tables are created
+
+        setTimeout(() => {
     console.log('Checking and adding missing columns...');
     
     const columnAdditions = [
@@ -183,7 +189,6 @@ CREATE TABLE IF NOT EXISTS import_stock_detail (
     processColumnAdditions();
 }, 2000);
  // Wait 2 seconds for tables to be created
-});
 
 // TRANSACTION TABLES - Updated to make customer details optional
 // In db.js, add to the customerDetails table creation
