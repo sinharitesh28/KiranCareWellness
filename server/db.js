@@ -264,6 +264,26 @@ CREATE TABLE IF NOT EXISTS transaction_items (
     FOREIGN KEY (stock_detail_id) REFERENCES import_stock_detail(id)
 );`;
 
+// SQL to create Reminders Table
+const createRemindersTable = `
+CREATE TABLE IF NOT EXISTS reminders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    transaction_id INT NOT NULL,
+    transaction_item_id INT NOT NULL,
+    medicine_name VARCHAR(255) NOT NULL,
+    dosage_time ENUM('morning', 'afternoon', 'evening', 'night') NOT NULL,
+    scheduled_time TIME NOT NULL,
+    status ENUM('pending', 'sent', 'taken', 'skipped', 'snoozed') DEFAULT 'pending',
+    sent_at DATETIME NULL,
+    response_at DATETIME NULL,
+    date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customerDetails(id) ON DELETE CASCADE,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+    FOREIGN KEY (transaction_item_id) REFERENCES transaction_items(id) ON DELETE CASCADE
+);`;
+
 // Execute new table creation queries
 db.query(createCustomerDetailsTable, (err) => {
     if (err) console.error('Error creating customerDetails table:', err.message);
@@ -278,6 +298,11 @@ db.query(createTransactionsTable, (err) => {
 db.query(createTransactionItemsTable, (err) => {
     if (err) console.error('Error creating transaction_items table:', err.message);
     else console.log('transaction_items table checked/created.');
+});
+
+db.query(createRemindersTable, (err) => {
+    if (err) console.error('Error creating reminders table:', err.message);
+    else console.log('reminders table checked/created.');
 });
 
 /*
@@ -316,7 +341,10 @@ setTimeout(() => {
         { table: 'transaction_items', column: 'dose_dispensing', definition: 'BOOLEAN DEFAULT FALSE' },
         { table: 'transaction_items', column: 'dose_stock_id', definition: 'INT NULL' },
         { table: 'transaction_items', column: 'dose_quantity', definition: 'INT NULL' },
-        { table: 'transaction_items', column: 'dose_unit_price', definition: 'DECIMAL(10,2) NULL' }
+        { table: 'transaction_items', column: 'dose_unit_price', definition: 'DECIMAL(10,2) NULL' },
+        // New columns for reminders
+        { table: 'transaction_items', column: 'dosage_schedule', definition: 'VARCHAR(50) NULL' }, // e.g., "1-0-1-0" (M-A-E-N)
+        { table: 'transaction_items', column: 'dosage_days', definition: 'INT DEFAULT 1' }
     ];
 
     async function processTransactionItemsColumnAdditions() {
@@ -333,5 +361,29 @@ setTimeout(() => {
 
     processTransactionItemsColumnAdditions();
 }, 4000);
+
+// Add missing columns to customerDetails table
+setTimeout(() => {
+    console.log('Checking and adding extra columns to customerDetails table...');
+    
+    const customerExtraColumnAdditions = [
+        { table: 'customerDetails', column: 'telegram_chat_id', definition: 'VARCHAR(100) NULL' },
+        { table: 'customerDetails', column: 'preferred_language', definition: "VARCHAR(10) DEFAULT 'en'" }
+    ];
+
+    async function processCustomerExtraColumnAdditions() {
+        for (const addition of customerExtraColumnAdditions) {
+            try {
+                await addColumnIfNotExists(addition.table, addition.column, addition.definition);
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (error) {
+                console.error(`Failed to process column ${addition.column}:`, error);
+            }
+        }
+        console.log('Customer extra columns check completed.');
+    }
+
+    processCustomerExtraColumnAdditions();
+}, 4500);
 
 module.exports = db;

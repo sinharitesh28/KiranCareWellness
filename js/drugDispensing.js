@@ -9,6 +9,8 @@ class MedicineDispensing {
         this.currentFacingMode = 'environment';
         this.codeReader = null;
         this.qrCodeObj = null; // Store QR code instance
+        this.telegramQr = null; // Store Telegram QR instance
+        this.botUsername = null; // Store Bot Username
         this.doseDispensingSearchMode = false; // Search filter for dose medicines
         this.handlePaymentMethodSelection();
         this.init();
@@ -59,6 +61,7 @@ class MedicineDispensing {
         this.initZXing();
         this.handlePaymentMethodSelection();
         this.initDoseDispensing();
+        this.fetchBotInfo();
     }
 
     // Initialize dose dispensing functionality
@@ -138,6 +141,8 @@ class MedicineDispensing {
         document.getElementById('customerMobile').addEventListener('blur', (e) => this.handleCustomerMobileBlur(e));
         document.getElementById('customerName').addEventListener('input', (e) => this.handleCustomerNameInput(e));
         document.getElementById('customerEmail').addEventListener('input', (e) => this.handleCustomerEmailInput(e));
+        document.getElementById('connectTelegramBtn').addEventListener('click', () => this.openTelegramModal());
+        document.getElementById('closeTelegramModal').addEventListener('click', () => this.closeTelegramModal());
         // Search events
         document.getElementById('medicineSearch').addEventListener('input', (e) => this.handleSearchInput(e));
         document.getElementById('searchCategory').addEventListener('change', () => this.handleSearch());
@@ -210,10 +215,12 @@ class MedicineDispensing {
                             document.getElementById('customerEmail').value = response.customer.email;
                         }
                         this.currentCustomer = response.customer;
+                        document.getElementById('connectTelegramBtn').classList.remove('hidden');
 
                         this.showMessage('Customer found!', 'success');
                     } else {
                         this.currentCustomer = null;
+                        document.getElementById('connectTelegramBtn').classList.add('hidden');
                         // Clear email field for new customers
                         document.getElementById('customerEmail').value = '';
                         this.showMessage('New customer. You can enter details if needed.', 'info');
@@ -552,6 +559,10 @@ class MedicineDispensing {
                     ₹${item.total_price.toFixed(2)}
                 </td>
                 <td class="py-3 px-3 text-center">
+                    <input type="text" class="w-20 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
+                           data-id="${item.id}" placeholder="1-0-1" title="Dosage: M-A-E-N (e.g. 1-0-1)">
+                </td>
+                <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -589,6 +600,10 @@ class MedicineDispensing {
                     ₹${item.total_price.toFixed(2)}
                 </td>
                 <td class="py-3 px-3 text-center">
+                    <input type="text" class="w-20 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
+                           data-id="${item.id}" placeholder="1-0-1" title="Dosage: M-A-E-N (e.g. 1-0-1)">
+                </td>
+                <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -604,6 +619,7 @@ class MedicineDispensing {
         }
         
         row.querySelector('.selling-price').addEventListener('input', (e) => this.updateItemPrice(e));
+        row.querySelector('.dosage-schedule').addEventListener('input', (e) => this.updateItemDosage(e));
         
         if (item.dose_dispensing) {
             row.querySelector('.quantity-decrease').addEventListener('click', (e) => this.decreaseQuantity(e));
@@ -673,6 +689,16 @@ class MedicineDispensing {
             }
             this.updateTableRow(item);
             this.calculateBillSummary();
+        }
+    }
+
+    updateItemDosage(event) {
+        const itemId = event.target.getAttribute('data-id');
+        const schedule = event.target.value.trim();
+        const item = this.selectedItems.find(i => i.id == itemId);
+
+        if (item) {
+            item.dosage_schedule = schedule;
         }
     }
 
@@ -1444,6 +1470,58 @@ class MedicineDispensing {
 
         if (dropdown && !dropdown.contains(event.target) && !searchInput.contains(event.target)) {
             this.hideSearchDropdown();
+        }
+    }
+
+    async fetchBotInfo() {
+        try {
+            const response = await fetch('/api/customers/bot-info');
+            const data = await response.json();
+            if (data.success) {
+                this.botUsername = data.username;
+            }
+        } catch (error) {
+            console.error('Error fetching bot info:', error);
+        }
+    }
+
+    openTelegramModal() {
+        if (!this.currentCustomer || !this.currentCustomer.id) {
+            this.showMessage('Please save/select a customer first.', 'warning');
+            return;
+        }
+
+        if (!this.botUsername) {
+            this.showMessage('Bot information not available. Check internet or server.', 'error');
+            return;
+        }
+
+        const modal = document.getElementById('telegramModal');
+        const qrContainer = document.getElementById('telegramQrCode');
+        const usernameDisplay = document.getElementById('botUsernameDisplay');
+        
+        modal.classList.remove('hidden');
+        usernameDisplay.textContent = `@${this.botUsername}`;
+
+        // Deep Link: https://t.me/BotName?start=CustomerID
+        const deepLink = `https://t.me/${this.botUsername}?start=${this.currentCustomer.id}`;
+        
+        qrContainer.innerHTML = '';
+        this.telegramQr = new QRCode(qrContainer, {
+            text: deepLink,
+            width: 200,
+            height: 200,
+            colorDark : "#0088cc", // Telegram Blue
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+    }
+
+    closeTelegramModal() {
+        document.getElementById('telegramModal').classList.add('hidden');
+        if (this.telegramQr) {
+            document.getElementById('telegramQrCode').innerHTML = ''; // clear
+            this.telegramQr = null;
         }
     }
 

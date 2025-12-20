@@ -5,6 +5,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const transporter = require('../mailer');
+const { scheduleRemindersForTransaction, sendDigitalBill } = require('../services/telegramService');
 
 const router = express.Router();
 
@@ -251,6 +252,16 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
         }
 
         await connection.commit();
+
+        // Trigger background tasks (Telegram Bot)
+        // We don't await these to ensure fast response to client
+        if (transactionId) {
+            scheduleRemindersForTransaction(transactionId).catch(e => console.error('Bg task reminder error:', e));
+            if (customerId) {
+                sendDigitalBill(customerId, transactionId).catch(e => console.error('Bg task bill error:', e));
+            }
+        }
+
         res.json({ success: true, transactionId, billNumber, message: 'Transaction saved successfully' });
 
     } catch (err) {

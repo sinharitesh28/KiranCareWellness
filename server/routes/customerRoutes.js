@@ -3,6 +3,14 @@ const router = express.Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 
+// Get Telegram Bot Info
+router.get('/bot-info', (req, res) => {
+    res.json({ 
+        success: true, 
+        username: process.env.TELEGRAM_BOT_USERNAME || 'KiranCareBot' // Fallback or from env
+    });
+});
+
 // Get all customers with their last 3 transactions
 router.get('/', requireAuth, async (req, res) => {
     try {

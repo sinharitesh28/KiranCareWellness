@@ -11,7 +11,7 @@ const dispenseRoutes = require('./routes/dispenseRoutes');
 const transactionRoutes = require('./routes/transactions');
 const analyticsRoutes = require('./routes/analyticsRoutes'); // NEW: Analytics routes
 const customerRoutes = require('./routes/customerRoutes'); // NEW: Customer routes
-
+require('./services/telegramService'); // NEW: Initialize Telegram Bot Service
 
 const app = express();
 
