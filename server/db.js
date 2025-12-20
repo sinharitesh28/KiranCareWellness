@@ -1,10 +1,13 @@
 ﻿const mysql = require('mysql2');
 
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || 'Ritesh45',
-    database: process.env.DB_NAME || 'kiranrxsmart'
+    database: process.env.DB_NAME || 'kiranrxsmart',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
 // Function to check if column exists and add it if not
@@ -47,15 +50,11 @@ function addColumnIfNotExists(tableName, columnName, columnDefinition) {
 }
 
 // Connect and ensure necessary tables exist
-db.connect(err => {
-    if (err) {
-        console.error('Database connection failed:', err.stack);
-        return;
-    }
-    console.log('Connected to database as id ' + db.threadId);
+// Pool handles connections automatically
+console.log('Database pool created.');
 
-    // SQL to create Import Template Table
-    const createImportTemplateTable = `
+// SQL to create Import Template Table
+const createImportTemplateTable = `
 CREATE TABLE IF NOT EXISTS importTemplate (
     id INT AUTO_INCREMENT PRIMARY KEY,
     template_name VARCHAR(255) NOT NULL UNIQUE,
