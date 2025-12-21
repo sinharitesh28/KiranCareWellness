@@ -73,14 +73,34 @@ input[type="text"]:focus, select:focus {
     font-weight: bold;
 }
 
-/* 4. Shop Logo Styling (Updated to provide a unique effect) */
-.shop-logo-container {
-    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+/* 5. Searchable Dropdown Styles */
+.searchable-select-container {
+    position: relative;
 }
 
-.shop-logo-container:hover {
-    /* Subtle 3D tilt effect on hover */
-    transform: rotate(3deg) scale(1.05);
-    /* Adding a glow effect using the accent color */
-    box-shadow: 0 0 0 4px var(--color-quarterly), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+.searchable-select-container .fa-chevron-down {
+    transition: transform 0.2s ease;
+}
+
+.searchable-select-container input:focus + .fa-chevron-down,
+.searchable-select-container input:not(:placeholder-shown) + .fa-chevron-down {
+    color: var(--color-primary);
+}
+
+#mappingSection div[id^="dropdown_"]::-webkit-scrollbar {
+    width: 6px;
+}
+
+#mappingSection div[id^="dropdown_"]::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+#mappingSection div[id^="dropdown_"]::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
+}
+
+#mappingSection div[id^="dropdown_"]::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
 }

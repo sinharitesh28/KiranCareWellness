@@ -37,12 +37,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 userName = defaultName;
             } else {
                 const data = await response.json();
-                // Assuming the server returns { name: "Ritesh" }
+                // Assuming the server returns { name: "Ritesh", is_admin: true }
                 if (data.name) {
                     userName = data.name;
                 } else {
                     console.warn('User data response is missing the "name" field. Using default.');
                     userName = defaultName;
+                }
+
+                // Check for admin status to show Management link
+                if (data.is_admin) {
+                    const adminLink = document.getElementById('userManagementLink');
+                    if (adminLink) adminLink.classList.remove('hidden');
                 }
             }
         } catch (error) {

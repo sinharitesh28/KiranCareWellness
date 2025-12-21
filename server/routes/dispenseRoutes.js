@@ -207,8 +207,8 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
         for (const item of items) {
             await connection.query(
                 `INSERT INTO transaction_items 
-                (transaction_id, stock_detail_id, item_name, item_description, mrp, selling_price, quantity, total_price, location, is_manual, dose_dispensing, dose_stock_id, dose_quantity, dose_unit_price) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (transaction_id, stock_detail_id, item_name, item_description, mrp, selling_price, quantity, total_price, location, is_manual, dose_dispensing, dose_stock_id, dose_quantity, dose_unit_price, dosage_schedule, dosage_days) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     transactionId,
                     item.stock_detail_id,
@@ -223,7 +223,9 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
                     item.dose_dispensing || false,
                     item.dose_stock_id || null,
                     item.dose_quantity || null,
-                    item.dose_unit_price || null
+                    item.dose_unit_price || null,
+                    item.dosage_schedule || null,
+                    item.dosage_days || 1
                 ]
             );
 
@@ -440,10 +442,10 @@ router.get('/search-medicines-with-dose', requireAuth, async (req, res) => {
 
     const searchSql = `
         SELECT * FROM (
-            SELECT d.id, d.item_name, d.item_desc, d.mrp, COALESCE(d.rate, d.mrp) as rate, d.quantity, d.location, d.barcode, d.batch_number, d.expiry_date, d.manufacturer, d.packing, 'normal' as stock_type, NULL as dose_stock_id, NULL as remaining_doses, NULL as total_doses, NULL as packing_size
+            SELECT d.id, d.item_name, d.item_desc, d.mrp, d.rate, COALESCE(d.mrp, d.rate, 0) as selling_price, d.quantity, d.location, d.barcode, d.batch_number, d.expiry_date, d.manufacturer, d.packing, 'normal' as stock_type, NULL as dose_stock_id, NULL as remaining_doses, NULL as total_doses, NULL as packing_size
             FROM import_stock_detail d WHERE d.quantity > 0 AND ${whereClauseNormal}
             UNION ALL
-            SELECT d.id, d.item_name, d.item_desc, ROUND(d.mrp / NULLIF(d.packing, 0), 2) as mrp, ROUND(COALESCE(d.rate, d.mrp) / NULLIF(d.packing, 0), 2) as rate, 0 as quantity, d.location, d.barcode, d.batch_number, d.expiry_date, d.manufacturer, d.packing, 'dose' as stock_type, d.id as dose_stock_id, d.loose_quantity as remaining_doses, d.packing as total_doses, d.packing as packing_size
+            SELECT d.id, d.item_name, d.item_desc, ROUND(d.mrp / NULLIF(d.packing, 0), 2) as mrp, ROUND(d.rate / NULLIF(d.packing, 0), 2) as rate, ROUND(COALESCE(d.mrp, d.rate, 0) / NULLIF(d.packing, 0), 2) as selling_price, 0 as quantity, d.location, d.barcode, d.batch_number, d.expiry_date, d.manufacturer, d.packing, 'dose' as stock_type, d.id as dose_stock_id, d.loose_quantity as remaining_doses, d.packing as total_doses, d.packing as packing_size
             FROM import_stock_detail d WHERE d.loose_quantity > 0 AND ${whereClauseNormal}
         ) AS combined_results ORDER BY item_name ASC LIMIT 50
     `;

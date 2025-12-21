@@ -50,7 +50,7 @@ const messages = {
 
 // 1. Handle /start command for linking
 if (bot) {
-    bot.onText(///start (.+)/, async (msg, match) => {
+    bot.onText(/\/start (.+)/, async (msg, match) => {
         const chatId = msg.chat.id;
         const customerId = match[1]; // The parameter passed in deep link
 
@@ -76,7 +76,46 @@ if (bot) {
         }
     });
 
-    // 2. Handle Callback Queries (Buttons)
+    // 2. Handle Contact Sharing (for phone number linking)
+    bot.on('contact', async (msg) => {
+        const chatId = msg.chat.id;
+        const contact = msg.contact;
+        
+        if (!contact || !contact.phone_number) return;
+
+        // Telegram might send number with or without +, so we might need to be flexible.
+        // Usually, we store 10 digits or with country code.
+        // Let's strip non-digits to match.
+        const cleanPhone = contact.phone_number.replace(/\D/g, ''); 
+        
+        try {
+            // Find customer
+            const [rows] = await db.promise().execute(
+                'SELECT id, preferred_language FROM customerDetails WHERE mobile_no LIKE ? OR mobile_no = ?', 
+                [`%${cleanPhone.slice(-10)}`, contact.phone_number]
+            );
+
+            if (rows.length > 0) {
+                const customer = rows[0];
+                await db.promise().execute(
+                    'UPDATE customerDetails SET telegram_chat_id = ? WHERE id = ?',
+                    [chatId, customer.id]
+                );
+                
+                const lang = customer.preferred_language || 'en';
+                bot.sendMessage(chatId, messages[lang].welcome, {
+                    reply_markup: { remove_keyboard: true }
+                });
+            } else {
+                bot.sendMessage(chatId, "Phone number not found in our records. Please visit the store.");
+            }
+        } catch (error) {
+            console.error('Error linking contact:', error);
+            bot.sendMessage(chatId, "Error linking account.");
+        }
+    });
+
+    // 3. Handle Callback Queries (Buttons)
     bot.on('callback_query', async (callbackQuery) => {
         const action = callbackQuery.data; // e.g., "taken_123" or "snooze_123"
         const msg = callbackQuery.message;
@@ -106,27 +145,42 @@ if (bot) {
     });
 }
 
-// 3. Cron Job for Reminders (Every minute for testing precision)
+// 4. Cron Job for Reminders (Every minute for testing precision)
 cron.schedule('* * * * *', async () => {
     if (!bot) return;
 
     try {
         const now = new Date();
-        const currentTime = now.toTimeString().split(' ')[0]; // HH:MM:SS
-        const today = now.toISOString().split('T')[0];
+        
+        // Use local time for comparison
+        const currentTime = now.getHours().toString().padStart(2, '0') + ':' + 
+                          now.getMinutes().toString().padStart(2, '0') + ':' + 
+                          now.getSeconds().toString().padStart(2, '0');
+        
+        // Get local date in YYYY-MM-DD format
+        const year = now.getFullYear();
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        const day = now.getDate().toString().padStart(2, '0');
+        const today = `${year}-${month}-${day}`;
+
+        console.log(`[Cron] Checking reminders at ${today} ${currentTime}`);
 
         // Find pending reminders due now (or recently passed)
+        // Using CURDATE() and CURTIME() directly in SQL to ensure consistency with DB timezone
         const [reminders] = await db.promise().execute(`
             SELECT r.*, c.telegram_chat_id, c.preferred_language 
             FROM reminders r
             JOIN customerDetails c ON r.customer_id = c.id
-            WHERE r.date = ? 
+            WHERE r.date = CURDATE()
             AND r.status = 'pending' 
-            AND r.scheduled_time <= ? 
+            AND r.scheduled_time <= CURTIME()
             AND c.telegram_chat_id IS NOT NULL
-        `, [today, currentTime]);
+        `);
+
+        console.log(`[Cron] Found ${reminders.length} pending reminders.`);
 
         for (const r of reminders) {
+            console.log(`[Cron] Sending reminder ${r.id} to ${r.telegram_chat_id}`);
             const lang = r.preferred_language || 'en';
             const txt = messages[lang];
             
@@ -142,10 +196,15 @@ cron.schedule('* * * * *', async () => {
                 }
             };
 
-            await bot.sendMessage(r.telegram_chat_id, `${txt.reminder}\n*${r.medicine_name}* (${r.dosage_time})`, { parse_mode: 'Markdown', ...opts });
-            
-            // Mark as sent
-            await db.promise().execute('UPDATE reminders SET status = ?, sent_at = NOW() WHERE id = ?', ['sent', r.id]);
+            try {
+                await bot.sendMessage(r.telegram_chat_id, `${txt.reminder}\n*${r.medicine_name}* (${r.dosage_time})`, { parse_mode: 'Markdown', ...opts });
+                
+                // Mark as sent
+                await db.promise().execute('UPDATE reminders SET status = ?, sent_at = NOW() WHERE id = ?', ['sent', r.id]);
+                console.log(`[Cron] Reminder ${r.id} marked as sent.`);
+            } catch (sendErr) {
+                console.error(`[Cron] Failed to send reminder ${r.id}:`, sendErr.message);
+            }
         }
 
     } catch (err) {
@@ -153,7 +212,7 @@ cron.schedule('* * * * *', async () => {
     }
 });
 
-// 4. Send Digital Bill
+// 5. Send Digital Bill
 async function sendDigitalBill(customerId, transactionId) {
     if (!bot) return;
 
@@ -192,7 +251,7 @@ async function sendDigitalBill(customerId, transactionId) {
     }
 }
 
-// 5. Generate Reminders from Transaction
+// 6. Generate Reminders from Transaction
 async function scheduleRemindersForTransaction(transactionId) {
     try {
         const [items] = await db.promise().execute(`
@@ -206,35 +265,34 @@ async function scheduleRemindersForTransaction(transactionId) {
 
         const remindersValues = [];
         
-        // Schedule map: 1-0-1-0 => Morning, Evening
-        // Times (approx): M=09:00, A=13:00, E=18:00, N=21:00
-        const timeMap = {
-            0: { name: 'morning', time: '09:00:00' },
-            1: { name: 'afternoon', time: '13:00:00' },
-            2: { name: 'evening', time: '18:00:00' },
-            3: { name: 'night', time: '21:00:00' }
-        };
-
         for (const item of items) {
-            const schedule = item.dosage_schedule.split('-'); // e.g. ['1', '0', '1', '0']
+            // New Format: "09:00, 14:00, 20:00"
+            if (!item.dosage_schedule) continue;
+
+            const times = item.dosage_schedule.split(',').map(t => t.trim()).filter(t => t);
             const days = item.dosage_days || 1;
             const startDate = new Date(item.transaction_date);
 
             for (let d = 0; d < days; d++) {
                 const currentDate = new Date(startDate);
                 currentDate.setDate(startDate.getDate() + d);
-                const dateStr = currentDate.toISOString().split('T')[0];
+                
+                // Get local date in YYYY-MM-DD format
+                const year = currentDate.getFullYear();
+                const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+                const day = currentDate.getDate().toString().padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
 
-                schedule.forEach((dose, index) => {
-                    if (dose === '1' && timeMap[index]) {
-                        // (customer_id, transaction_id, transaction_item_id, medicine_name, dosage_time, scheduled_time, date)
+                times.forEach(time => {
+                    // Basic validation for HH:MM format
+                    if (/^\d{2}:\d{2}/.test(time)) {
                         remindersValues.push([
                             item.customer_id,
                             transactionId,
                             item.id,
                             item.item_name,
-                            timeMap[index].name,
-                            timeMap[index].time,
+                            time, // Dosage time label (e.g. 09:00)
+                            time + ':00', // Scheduled time (e.g. 09:00:00)
                             dateStr
                         ]);
                     }

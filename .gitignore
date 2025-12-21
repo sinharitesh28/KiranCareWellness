@@ -1,0 +1,36 @@
+node_modules/
+npm-debug.log
+.dockerignore
+.wwebjs_auth/
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+env/
+venv/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pytest_cache/
+
+# Environment files
+.env
+.env.*
+server/.env
+
+# IDEs
+.vs/
+.vscode/
+*.swp
+*.swo

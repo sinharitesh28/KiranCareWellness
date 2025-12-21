@@ -98,23 +98,25 @@ router.get('/user-data', requireAuth, async (req, res) => {
     const employeeCode = req.session.code; 
 
     try {
-        // SQL to fetch the 'name' column based on the 'code' column
+        // SQL to fetch the 'name' and 'is_admin' columns
         const [results] = await db.promise().query(
-            'SELECT name FROM employeedetails WHERE code = ?',
+            'SELECT name, is_admin FROM employeedetails WHERE code = ?',
             [employeeCode]
         );
 
         if (results.length > 0) {
-            // Found the user, return their name
-            const userName = results[0].name;
-            res.json({ name: userName });
+            // Found the user, return their name and admin status
+            res.json({ 
+                name: results[0].name,
+                is_admin: results[0].is_admin ? true : false
+            });
         } else {
             // User not found (should not happen if authentication succeeded)
             console.warn(`Authenticated code ${employeeCode} not found in DB.`);
             res.status(404).json({ error: 'User data not found.' });
         }
     } catch (err) {
-        console.error('Database query error fetching user name:', err);
+        console.error('Database query error fetching user data:', err);
         // Send a generic error response, but log the specific error
         res.status(500).json({ error: 'Internal server error while fetching user data.' });
     }

@@ -215,7 +215,24 @@ class MedicineDispensing {
                             document.getElementById('customerEmail').value = response.customer.email;
                         }
                         this.currentCustomer = response.customer;
-                        document.getElementById('connectTelegramBtn').classList.remove('hidden');
+                        
+                        const telegramBtn = document.getElementById('connectTelegramBtn');
+                        telegramBtn.classList.remove('hidden');
+
+                        // Check if already linked
+                        if (this.currentCustomer.telegram_chat_id) {
+                            telegramBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+                            telegramBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                            telegramBtn.innerHTML = '<i class="fas fa-check-circle text-xl mr-2"></i> Linked';
+                            telegramBtn.disabled = true;
+                            telegramBtn.title = "Customer already linked to Telegram";
+                        } else {
+                            telegramBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+                            telegramBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                            telegramBtn.innerHTML = '<i class="fab fa-telegram-plane text-xl"></i>';
+                            telegramBtn.disabled = false;
+                            telegramBtn.title = "Connect Telegram Bot";
+                        }
 
                         this.showMessage('Customer found!', 'success');
                     } else {
@@ -392,15 +409,17 @@ class MedicineDispensing {
             existingItem.total_price = existingItem.selling_price * existingItem.quantity;
             this.updateTableRow(existingItem);
         } else {
+            const initialSellingPrice = parseFloat(medicine.selling_price) || parseFloat(medicine.mrp) || 0;
             const newItem = {
                 id: Date.now() + Math.random(),
                 stock_detail_id: medicine.id,
                 item_name: isManual ? 'Other' : medicine.item_name,
                 item_description: medicine.item_desc || '',
                 mrp: parseFloat(medicine.mrp) || 0,
-                selling_price: parseFloat(medicine.mrp) || 0,
+                rate: parseFloat(medicine.rate) || parseFloat(medicine.mrp) || 0,
+                selling_price: initialSellingPrice,
                 quantity: 1,
-                total_price: parseFloat(medicine.mrp) || 0,
+                total_price: initialSellingPrice,
                 location: medicine.location || '',
                 dose_dispensing: false, // Explicitly false for normal items
                 is_manual: isManual
@@ -430,18 +449,25 @@ class MedicineDispensing {
 
                 if (response.success) {
                     // Get the converted dose stock
+                    const packing = response.packing;
+                    const doseMrp = parseFloat((medicine.mrp / packing).toFixed(2));
+                    const doseRate = medicine.rate ? parseFloat((medicine.rate / packing).toFixed(2)) : doseMrp;
+                    // For dose, also default to MRP-based price
+                    const doseSellingPrice = doseMrp;
+
                     const doseMedicine = {
                         ...medicine,
                         stock_type: 'dose',
                         dose_stock_id: response.doseStockId,
-                        remaining_doses: response.packing,
-                        total_doses: response.packing,
-                        mrp: parseFloat((medicine.mrp / response.packing).toFixed(2)),
-                        rate: medicine.rate ? parseFloat((medicine.rate / response.packing).toFixed(2)) : parseFloat((medicine.mrp / response.packing).toFixed(2))
+                        remaining_doses: packing,
+                        total_doses: packing,
+                        mrp: doseMrp,
+                        rate: doseRate,
+                        selling_price: doseSellingPrice
                     };
                     
                     this.addDoseMedicineToTable(doseMedicine);
-                    this.showMessage(`Medicine converted to dose dispensing stock! (Packing: ${response.packing} doses)`, 'success');
+                    this.showMessage(`Medicine converted to dose dispensing stock! (Packing: ${packing} doses)`, 'success');
                 }
             } catch (error) {
                 console.error('Dose conversion error:', error);
@@ -481,19 +507,20 @@ class MedicineDispensing {
                 existingItem.total_price = existingItem.dose_unit_price * existingItem.dose_quantity;
                 this.updateTableRow(existingItem);
             } else {
-                const doseUnitPrice = medicine.mrp;
+                const doseSellingPrice = parseFloat(medicine.selling_price) || parseFloat(medicine.mrp) || 0;
                 const newItem = {
                     id: Date.now() + Math.random(),
                     stock_detail_id: medicine.id,
                     dose_stock_id: medicine.dose_stock_id || medicine.id,
                     item_name: medicine.item_name + ' (Dose)',
                     item_description: medicine.item_desc || '',
-                    mrp: medicine.mrp,
-                    selling_price: doseUnitPrice,
+                    mrp: parseFloat(medicine.mrp) || 0,
+                    rate: parseFloat(medicine.rate) || parseFloat(medicine.mrp) || 0,
+                    selling_price: doseSellingPrice,
                     quantity: 1,
                     dose_quantity: 1,
-                    dose_unit_price: doseUnitPrice,
-                    total_price: doseUnitPrice,
+                    dose_unit_price: doseSellingPrice,
+                    total_price: doseSellingPrice,
                     location: medicine.location || '',
                     dose_dispensing: true, // Explicitly true for dose items
                     is_manual: false
@@ -526,12 +553,16 @@ class MedicineDispensing {
         const row = document.createElement('tr');
         row.className = 'bg-white border-b hover:bg-gray-50 transition duration-150';
         
+        // Initialize dosage_days if not set
+        if (!item.dosage_days) item.dosage_days = 1;
+
         if (item.dose_dispensing) {
             row.classList.add('dose-item-row');
+            const title = `Dose MRP: ₹${item.mrp.toFixed(2)} | Dose Rate: ₹${item.rate.toFixed(2)}`;
             row.innerHTML = `
                 <td class="py-3 px-3 font-medium text-gray-900 whitespace-nowrap">
                     <div class="flex items-center">
-                        <span title="Dose MRP: ₹${item.mrp.toFixed(2)} | Rate: ₹${item.selling_price.toFixed(2)}">
+                        <span class="medicine-name-span cursor-help" title="${title}" data-title="${title}">
                             ${item.item_name}
                         </span>
                         <span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">Dose</span>
@@ -559,8 +590,8 @@ class MedicineDispensing {
                     ₹${item.total_price.toFixed(2)}
                 </td>
                 <td class="py-3 px-3 text-center">
-                    <input type="text" class="w-20 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
-                           data-id="${item.id}" placeholder="1-0-1" title="Dosage: M-A-E-N (e.g. 1-0-1)">
+                    <input type="text" class="w-24 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
+                           data-id="${item.id}" placeholder="09:00, 21:00" title="Enter times (HH:MM) separated by comma. e.g. 09:00, 14:00, 20:00">
                 </td>
                 <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">
@@ -569,13 +600,14 @@ class MedicineDispensing {
                 </td>
             `;
         } else {
+            const title = `MRP: ₹${item.mrp.toFixed(2)} | Rate: ₹${item.rate.toFixed(2)}`;
             row.innerHTML = `
                 <td class="py-3 px-3 font-medium text-gray-900 whitespace-nowrap">
                     ${item.is_manual ?
                     `<input type="text" value="${item.item_name}" 
                                class="w-full p-1 border border-gray-300 rounded text-sm focus:ring-primary focus:border-primary item-name-input"
                                data-id="${item.id}" placeholder="Enter item name">` :
-                    `<span title="MRP: ₹${item.mrp.toFixed(2)} | Rate: ₹${item.selling_price.toFixed(2)}">${item.item_name}</span>`
+                    `<span class="medicine-name-span cursor-help" title="${title}" data-title="${title}">${item.item_name}</span>`
                 }
                     ${item.item_description ? `<div class="text-xs text-gray-500">${item.item_description}</div>` : ''}
                 </td>
@@ -600,8 +632,8 @@ class MedicineDispensing {
                     ₹${item.total_price.toFixed(2)}
                 </td>
                 <td class="py-3 px-3 text-center">
-                    <input type="text" class="w-20 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
-                           data-id="${item.id}" placeholder="1-0-1" title="Dosage: M-A-E-N (e.g. 1-0-1)">
+                    <input type="text" class="w-24 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
+                           data-id="${item.id}" placeholder="09:00, 21:00" title="Enter times (HH:MM) separated by comma">
                 </td>
                 <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">
@@ -612,6 +644,9 @@ class MedicineDispensing {
         }
 
         tbody.appendChild(row);
+
+        // Add long-press support for mobile
+        this.addLongPressListener(row.querySelector('.medicine-name-span'));
 
         // Add event listeners
         if (item.is_manual) {
@@ -640,6 +675,35 @@ class MedicineDispensing {
         row.querySelector('.remove-item').addEventListener('click', (e) => this.removeItem(e));
     }
 
+    addLongPressListener(element) {
+        if (!element) return;
+
+        let pressTimer;
+
+        const start = (e) => {
+            if (e.type === 'click' && e.button !== 0) return;
+            pressTimer = window.setTimeout(() => {
+                const title = element.getAttribute('data-title');
+                this.showMessage(title, 'info');
+            }, 800);
+        };
+
+        const cancel = (e) => {
+            if (pressTimer !== null) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        };
+
+        element.addEventListener('mousedown', start);
+        element.addEventListener('touchstart', start);
+        element.addEventListener('click', cancel);
+        element.addEventListener('mouseout', cancel);
+        element.addEventListener('touchend', cancel);
+        element.addEventListener('touchleave', cancel);
+        element.addEventListener('touchcancel', cancel);
+    }
+
     updateItemName(event) {
         const itemId = event.target.getAttribute('data-id');
         const newName = event.target.value.trim() || 'Other';
@@ -653,13 +717,16 @@ class MedicineDispensing {
     updateTableRow(item) {
         const row = document.querySelector(`tr:has(.selling-price[data-id="${item.id}"])`);
         if (row) {
-            const nameElement = row.querySelector('.item-name-input') || row.querySelector('span');
-            if (nameElement && nameElement.tagName === 'SPAN') {
+            const nameElement = row.querySelector('.medicine-name-span');
+            if (nameElement) {
+                let title = '';
                 if (item.dose_dispensing) {
-                    nameElement.setAttribute('title', `Dose MRP: ₹${item.mrp.toFixed(2)} | Rate: ₹${item.selling_price.toFixed(2)}`);
+                    title = `Dose MRP: ₹${item.mrp.toFixed(2)} | Dose Rate: ₹${item.rate.toFixed(2)}`;
                 } else {
-                    nameElement.setAttribute('title', `MRP: ₹${item.mrp.toFixed(2)} | Rate: ₹${item.selling_price.toFixed(2)}`);
+                    title = `MRP: ₹${item.mrp.toFixed(2)} | Rate: ₹${item.rate.toFixed(2)}`;
                 }
+                nameElement.setAttribute('title', title);
+                nameElement.setAttribute('data-title', title);
             }
 
             if (item.dose_dispensing) {
@@ -699,6 +766,39 @@ class MedicineDispensing {
 
         if (item) {
             item.dosage_schedule = schedule;
+            this.calculateDosageDays(item);
+        }
+    }
+
+    calculateDosageDays(item) {
+        // Only calculate for items with dosage schedule
+        if (!item.dosage_schedule) {
+            item.dosage_days = 1;
+            return;
+        }
+
+        // Count number of times per day (comma separated)
+        const times = item.dosage_schedule.split(',').filter(t => t.trim().length > 0);
+        const frequencyPerDay = times.length || 1;
+        
+        // Total units given
+        const totalUnits = item.dose_dispensing ? item.dose_quantity : item.quantity;
+        
+        // Assume 1 unit per dose unless specified (could be an enhancement later)
+        const unitsPerDose = 1; 
+        
+        // Calculate days: Total / (Frequency * UnitPerDose)
+        const days = totalUnits / (frequencyPerDay * unitsPerDose);
+        
+        item.dosage_days = Math.max(1, Math.ceil(days));
+        
+        console.log(`Calculated days for ${item.item_name}: ${days} -> ${item.dosage_days} days (Freq: ${frequencyPerDay}, Total: ${totalUnits})`);
+        
+        // Optional: Update UI to show calculated days if we add a field for it
+        // For now, maybe update the tooltip of the dosage input
+        const input = document.querySelector(`.dosage-schedule[data-id="${item.id}"]`);
+        if (input) {
+            input.title = `Schedule: ${item.dosage_schedule} | Est. Duration: ${item.dosage_days} Days`;
         }
     }
 
@@ -739,6 +839,7 @@ class MedicineDispensing {
                     item.dose_quantity = Math.max(1, newDoseQuantity);
                     item.quantity = item.dose_quantity;
                     item.total_price = item.dose_unit_price * item.dose_quantity;
+                    this.calculateDosageDays(item); // Recalculate days
                     this.updateTableRow(item);
                     this.calculateBillSummary();
                 }
@@ -763,6 +864,7 @@ class MedicineDispensing {
                     item.dose_quantity -= 1;
                     item.quantity = item.dose_quantity;
                     item.total_price = item.dose_unit_price * item.dose_quantity;
+                    this.calculateDosageDays(item); // Recalculate days
                     this.updateTableRow(item);
                     this.calculateBillSummary();
                 }
@@ -770,6 +872,7 @@ class MedicineDispensing {
                 if (item.quantity > 1) {
                     item.quantity -= 1;
                     item.total_price = item.selling_price * item.quantity;
+                    this.calculateDosageDays(item); // Recalculate days (if applied to regular items)
                     this.updateTableRow(item);
                     this.calculateBillSummary();
                 }
@@ -803,6 +906,7 @@ class MedicineDispensing {
                         item.dose_quantity = newDoseQuantity;
                         item.quantity = item.dose_quantity;
                         item.total_price = item.dose_unit_price * item.dose_quantity;
+                        this.calculateDosageDays(item); // Recalculate days
                         this.updateTableRow(item);
                         this.calculateBillSummary();
                     }
@@ -816,6 +920,7 @@ class MedicineDispensing {
             } else {
                 item.quantity += 1;
                 item.total_price = item.selling_price * item.quantity;
+                this.calculateDosageDays(item); // Recalculate days
                 this.updateTableRow(item);
                 this.calculateBillSummary();
             }

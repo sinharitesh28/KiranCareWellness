@@ -3,7 +3,7 @@
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || 'Ritesh45',
+    password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'kiranrxsmart',
     waitForConnections: true,
     connectionLimit: 10,
@@ -272,7 +272,7 @@ CREATE TABLE IF NOT EXISTS reminders (
     transaction_id INT NOT NULL,
     transaction_item_id INT NOT NULL,
     medicine_name VARCHAR(255) NOT NULL,
-    dosage_time ENUM('morning', 'afternoon', 'evening', 'night') NOT NULL,
+    dosage_time VARCHAR(50) NOT NULL,
     scheduled_time TIME NOT NULL,
     status ENUM('pending', 'sent', 'taken', 'skipped', 'snoozed') DEFAULT 'pending',
     sent_at DATETIME NULL,
@@ -385,5 +385,27 @@ setTimeout(() => {
 
     processCustomerExtraColumnAdditions();
 }, 4500);
+
+// Add is_admin column to employeedetails
+setTimeout(() => {
+    console.log('Checking and adding is_admin column to employeedetails table...');
+    
+    async function setupEmployeeAdmin() {
+        try {
+            await addColumnIfNotExists('employeedetails', 'is_admin', 'BOOLEAN DEFAULT FALSE');
+            
+            // Set user ID 3 as admin for now
+            const updateAdminSql = 'UPDATE employeedetails SET is_admin = TRUE WHERE code = 3';
+            db.query(updateAdminSql, (err) => {
+                if (err) console.error('Error setting initial admin:', err.message);
+                else console.log('Admin user updated (ID 3).');
+            });
+        } catch (error) {
+            console.error('Failed to setup employee admin column:', error);
+        }
+    }
+
+    setupEmployeeAdmin();
+}, 5000);
 
 module.exports = db;

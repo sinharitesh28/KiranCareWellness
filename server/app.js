@@ -11,6 +11,7 @@ const dispenseRoutes = require('./routes/dispenseRoutes');
 const transactionRoutes = require('./routes/transactions');
 const analyticsRoutes = require('./routes/analyticsRoutes'); // NEW: Analytics routes
 const customerRoutes = require('./routes/customerRoutes'); // NEW: Customer routes
+const userRoutes = require('./routes/userRoutes'); // NEW: User management routes
 require('./services/telegramService'); // NEW: Initialize Telegram Bot Service
 
 const app = express();
@@ -67,6 +68,10 @@ protectedRouter.get('/drugDispensing.html', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'html', 'drugDispensing.html'));
 });
 
+protectedRouter.get('/UserManagement.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'html', 'UserManagement.html'));
+});
+
 
 // Use the protected router
 app.use(protectedRouter);
@@ -79,6 +84,7 @@ app.use('/api/dispense', dispenseRoutes);
 app.use('/api/dispense', transactionRoutes);
 app.use('/api/analytics', analyticsRoutes); // NEW: Analytics API
 app.use('/api/customers', customerRoutes); // NEW: Customer API
+app.use('/api/users', userRoutes); // NEW: User API
 
 // simple error handler
 app.use((err, req, res, next) => {

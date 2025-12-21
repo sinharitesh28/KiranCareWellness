@@ -1,0 +1,71 @@
+/* UserManagement.css */
+
+@keyframes slide-up {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out forwards;
+}
+
+.animate-slide-in {
+    animation: slide-in 0.3s ease-out forwards;
+}
+
+table {
+    border-spacing: 0;
+}
+
+thead th {
+    letter-spacing: 0.05em;
+}
+
+tbody tr {
+    transition: all 0.2s ease;
+}
+
+tbody tr:last-child {
+    border-bottom: none;
+}
+
+/* Custom Scrollbar for the table */
+.overflow-x-auto::-webkit-scrollbar {
+    height: 6px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+    background: #00712D;
+    border-radius: 10px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+    background: #005A24;
+}
+
+/* Modal responsive fixes */
+@media (max-width: 640px) {
+    .max-w-md {
+        max-width: 100%;
+    }
+}
+
+/* Input number arrows hide */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}

@@ -103,28 +103,55 @@ function renderMappingSection() {
     REQUIRED_FIELDS.forEach(field => {
         // Create the div container for the field
         const div = document.createElement('div');
-        div.className = 'flex flex-col space-y-1';
+        div.className = 'flex flex-col space-y-1 relative searchable-select-container';
         div.id = `field_container_${field.id}`;
         
         // Label
         const label = document.createElement('label');
         label.className = 'text-sm font-medium text-gray-700 flex items-center';
-        label.htmlFor = field.id;
+        label.htmlFor = `search_${field.id}`;
         label.textContent = field.label;
         if (field.required) {
             label.innerHTML += ' <span class="text-red-500 ml-1">*</span>';
         }
         
-        // Select dropdown
-        const select = document.createElement('select');
-        select.id = field.id;
-        select.name = field.id;
-        select.required = field.required; // Note: HTML required only works if no-selection is disabled
-        select.className = 'mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-primary focus:border-primary bg-white';
+        // Input Wrapper (for icon)
+        const inputWrapper = document.createElement('div');
+        inputWrapper.className = 'relative';
+
+        // Search Input
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.id = `search_${field.id}`;
+        searchInput.placeholder = field.required ? 'Select Column...' : 'Ignore...';
+        searchInput.className = 'mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 pr-8 text-sm focus:ring-primary focus:border-primary bg-white cursor-pointer';
+        searchInput.autocomplete = 'off';
+        
+        // Dropdown Icon (Chevron)
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200';
+        icon.id = `icon_${field.id}`;
+
+        // Hidden Input for actual value
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.id = field.id;
+        hiddenInput.name = field.id;
+        hiddenInput.required = field.required;
+        
+        // Options Dropdown
+        const dropdown = document.createElement('div');
+        dropdown.id = `dropdown_${field.id}`;
+        dropdown.className = 'absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden top-full left-0';
         
         // Append elements
+        inputWrapper.appendChild(searchInput);
+        inputWrapper.appendChild(icon);
+        
         div.appendChild(label);
-        div.appendChild(select);
+        div.appendChild(inputWrapper);
+        div.appendChild(hiddenInput);
+        div.appendChild(dropdown);
         container.appendChild(div);
         
         // Optional error message below the input
@@ -132,36 +159,126 @@ function renderMappingSection() {
         errorMsg.id = `${field.id}_error`;
         errorMsg.className = 'text-xs text-red-500 mt-1 hidden';
         div.appendChild(errorMsg);
+
+        // Add Event Listeners for search and dropdown
+        setupSearchableSelect(field.id);
     });
 }
+
+function setupSearchableSelect(fieldId) {
+    const searchInput = document.getElementById(`search_${fieldId}`);
+    const hiddenInput = document.getElementById(fieldId);
+    const dropdown = document.getElementById(`dropdown_${fieldId}`);
+    const icon = document.getElementById(`icon_${fieldId}`);
+
+    const showDropdown = () => {
+        filterOptions(fieldId, searchInput.value);
+        dropdown.classList.remove('hidden');
+        icon.classList.add('rotate-180');
+    };
+
+    const hideDropdown = () => {
+        // Use a small delay so mousedown on dropdown can trigger selectOption first
+        setTimeout(() => {
+            if (!dropdown.classList.contains('hidden')) {
+                dropdown.classList.add('hidden');
+                icon.classList.remove('rotate-180');
+                // Restore search input to reflect current hidden value
+                searchInput.value = hiddenInput.value;
+            }
+        }, 200);
+    };
+
+    searchInput.addEventListener('focus', showDropdown);
+    searchInput.addEventListener('click', showDropdown);
+
+    searchInput.addEventListener('input', () => {
+        filterOptions(fieldId, searchInput.value);
+        dropdown.classList.remove('hidden');
+        icon.classList.add('rotate-180');
+    });
+
+    searchInput.addEventListener('blur', hideDropdown);
+}
+
+function filterOptions(fieldId, searchText) {
+    const dropdown = document.getElementById(`dropdown_${fieldId}`);
+    const hiddenInput = document.getElementById(fieldId);
+    const searchInput = document.getElementById(`search_${fieldId}`);
+    const field = REQUIRED_FIELDS.find(f => f.id === fieldId);
+    
+    dropdown.innerHTML = '';
+    const text = searchText.toLowerCase();
+
+    // Default option
+    if (!text || '--- select column ---'.includes(text) || '--- ignore ---'.includes(text)) {
+        const defaultDiv = document.createElement('div');
+        defaultDiv.className = 'p-2 text-sm cursor-pointer hover:bg-gray-100 text-gray-500 italic';
+        defaultDiv.textContent = field.required ? '--- Select Column ---' : '--- Ignore ---';
+        // Use mousedown to ensure it fires before blur
+        defaultDiv.onmousedown = (e) => {
+            e.preventDefault(); // Prevent blur from firing immediately
+            selectOption(fieldId, '', '');
+        };
+        dropdown.appendChild(defaultDiv);
+    }
+
+    globalHeaders.forEach(header => {
+        if (header.toLowerCase().includes(text)) {
+            const item = document.createElement('div');
+            item.className = 'p-2 text-sm cursor-pointer hover:bg-gray-100 transition';
+            if (hiddenInput.value === header) {
+                item.classList.add('bg-secondary', 'text-primary', 'font-semibold');
+            }
+            item.textContent = header;
+            // Use mousedown to ensure it fires before blur
+            item.onmousedown = (e) => {
+                e.preventDefault(); // Prevent blur from firing immediately
+                selectOption(fieldId, header, header);
+            };
+            dropdown.appendChild(item);
+        }
+    });
+
+    if (dropdown.innerHTML === '') {
+        const noResult = document.createElement('div');
+        noResult.className = 'p-2 text-sm text-gray-500 italic';
+        noResult.textContent = 'No matching columns found';
+        dropdown.appendChild(noResult);
+    }
+}
+
+function selectOption(fieldId, value, displayText) {
+    const searchInput = document.getElementById(`search_${fieldId}`);
+    const hiddenInput = document.getElementById(fieldId);
+    const dropdown = document.getElementById(`dropdown_${fieldId}`);
+
+    hiddenInput.value = value;
+    searchInput.value = value === '' ? '' : displayText;
+    dropdown.classList.add('hidden');
+
+    // Trigger change event for template name preview
+    const event = new Event('change');
+    hiddenInput.dispatchEvent(event);
+}
+
 
 // Updates dropdowns with extracted headers
 function updateDropdowns(headers) {
     REQUIRED_FIELDS.forEach(field => {
-        const select = document.getElementById(field.id);
-        if (select) {
-            const currentValue = select.value; // Preserve current value if any
+        const hiddenInput = document.getElementById(field.id);
+        const searchInput = document.getElementById(`search_${field.id}`);
+        
+        if (hiddenInput && searchInput) {
+            const currentValue = hiddenInput.value;
             
-            // Clear existing options
-            select.innerHTML = '';
-            
-            // Add default "Select Column" option
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = field.required ? '--- Select Column ---' : '--- Ignore ---';
-            select.appendChild(defaultOption);
-
-            // Add headers
-            headers.forEach(header => {
-                const option = document.createElement('option');
-                option.value = header;
-                option.textContent = header;
-                select.appendChild(option);
-            });
-            
-            // Restore value if it exists in new headers
-            if (headers.includes(currentValue)) {
-                select.value = currentValue;
+            // If the current value is not in the new headers, clear it
+            if (currentValue && !headers.includes(currentValue)) {
+                hiddenInput.value = '';
+                searchInput.value = '';
+            } else if (currentValue) {
+                // Keep the current value
+                searchInput.value = currentValue;
             }
         }
     });
@@ -787,16 +904,18 @@ async function loadTemplateForEdit(id) {
                 if (template[field.id]) mappedValues.add(template[field.id]);
             });
             
-            // Update dropdowns with these values
-            updateDropdowns(Array.from(mappedValues));
+            globalHeaders = Array.from(mappedValues);
             
-            // Set selected values
+            // Set selected values on hidden inputs first
             REQUIRED_FIELDS.forEach(field => {
-                const select = document.getElementById(field.id);
-                if (select && template[field.id]) {
-                    select.value = template[field.id];
+                const hiddenInput = document.getElementById(field.id);
+                if (hiddenInput && template[field.id]) {
+                    hiddenInput.value = template[field.id];
                 }
             });
+
+            // Update dropdowns (this will also sync searchInputs)
+            updateDropdowns(globalHeaders);
 
             // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
