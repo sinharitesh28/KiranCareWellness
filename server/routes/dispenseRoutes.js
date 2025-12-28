@@ -12,14 +12,14 @@ const router = express.Router();
 // Search customer by mobile number
 router.get('/search-customer', requireAuth, async (req, res) => {
     const { mobile } = req.query;
-    
+
     if (!mobile) {
         return res.status(400).json({ success: false, error: 'Mobile number is required' });
     }
 
     try {
         const [results] = await db.promise().query('SELECT * FROM customerDetails WHERE mobile_no = ?', [mobile]);
-        
+
         if (results.length > 0) {
             res.json({ success: true, customer: results[0], exists: true });
         } else {
@@ -34,7 +34,7 @@ router.get('/search-customer', requireAuth, async (req, res) => {
 // Save or update customer
 router.post('/save-customer', requireAuth, async (req, res) => {
     const { mobile_no, name, email } = req.body;
-    
+
     if (!mobile_no || !name) {
         return res.status(400).json({ success: false, error: 'Mobile number and name are required' });
     }
@@ -44,13 +44,13 @@ router.post('/save-customer', requireAuth, async (req, res) => {
         VALUES (?, ?, ?) 
         ON DUPLICATE KEY UPDATE name = ?, email = ?, updated_at = CURRENT_TIMESTAMP
     `;
-    
+
     try {
         const [results] = await db.promise().query(customerSql, [mobile_no, name, email, name, email]);
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Customer saved successfully',
-            customerId: results.insertId 
+            customerId: results.insertId
         });
     } catch (err) {
         console.error('Database error saving customer:', err);
@@ -61,7 +61,7 @@ router.post('/save-customer', requireAuth, async (req, res) => {
 // Search medicines
 router.get('/search-medicines', requireAuth, async (req, res) => {
     const { query, category } = req.query;
-    
+
     if (!query) {
         return res.status(400).json({ success: false, error: 'Search query is required' });
     }
@@ -107,7 +107,7 @@ router.get('/search-medicines', requireAuth, async (req, res) => {
 // Search by barcode
 router.get('/search-by-barcode', requireAuth, async (req, res) => {
     const { barcode } = req.query;
-    
+
     if (!barcode) {
         return res.status(400).json({ success: false, error: 'Barcode is required' });
     }
@@ -140,7 +140,7 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
     const { customer, items, summary, paymentMethod } = req.body;
     const userId = req.session.code;
 
-    if (!customer || !items || items.length === 0 || !summary) {
+    if (!items || items.length === 0 || !summary) {
         return res.status(400).json({ success: false, error: 'Incomplete transaction data' });
     }
 
@@ -181,6 +181,17 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
             }
         }
 
+        // If no specific customer identified, use/create "Walk-in Customer"
+        if (!customerId) {
+            const [walkIn] = await connection.query("SELECT id FROM customerDetails WHERE mobile_no = '0000000000'");
+            if (walkIn.length > 0) {
+                customerId = walkIn[0].id;
+            } else {
+                const [res] = await connection.query("INSERT INTO customerDetails (name, mobile_no) VALUES ('Walk-in Customer', '0000000000')");
+                customerId = res.insertId;
+            }
+        }
+
         const generateBillNumber = () => `BILL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const billNumber = generateBillNumber();
 
@@ -198,7 +209,7 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
                 billNumber,
                 userId || 'PHARM-1001',
                 customer && customer.mobile ? customer.mobile.trim() : null,
-                customer && customer.name ? customer.name.trim() : null
+                customer && customer.name ? customer.name.trim() : (customerId ? 'Walk-in Customer' : null)
             ]
         );
         const transactionId = transResult.insertId;
@@ -285,6 +296,219 @@ router.post('/send-whatsapp-bill', requireAuth, (req, res) => {
     res.json({ success: true, message: 'WhatsApp bill sent successfully' });
 });
 
+// NEW: Search Invoices
+router.get('/search-invoices', requireAuth, async (req, res) => {
+    const { query } = req.query;
+    if (!query || query.length < 2) return res.status(400).json({ success: false, error: 'Query required (min 2 chars)' });
+
+    try {
+        const [results] = await db.promise().query(`
+            SELECT t.id, t.bill_number, t.transaction_date, t.total_amount, t.customer_name, t.customer_mobile, t.is_modified, t.status 
+            FROM transactions t
+            WHERE t.bill_number LIKE ? OR t.customer_mobile LIKE ?
+            ORDER BY t.transaction_date DESC LIMIT 20
+        `, [`%${query}%`, `%${query}%`]);
+
+        res.json({ success: true, transactions: results });
+    } catch (err) {
+        console.error('Error searching invoices:', err);
+        res.status(500).json({ success: false, error: 'Database error' });
+    }
+});
+
+// NEW: Get Transaction Details for Editing
+router.get('/transaction/:id', requireAuth, async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        // Fetch transaction metadata
+        const [transResults] = await db.promise().query(
+            'SELECT * FROM transactions WHERE id = ?',
+            [id]
+        );
+
+        if (transResults.length === 0) return res.status(404).json({ success: false, error: 'Transaction not found' });
+
+        const transaction = transResults[0];
+
+        // Fetch items joined with CURRENT stock details to ensure valid IDs and current stock
+        // We join with import_stock_detail to get current stock levels, which helps validation
+        const [items] = await db.promise().query(`
+            SELECT 
+                ti.*, 
+                s.quantity as current_stock_quantity, 
+                s.loose_quantity as current_stock_loose_quantity
+            FROM transaction_items ti
+            LEFT JOIN import_stock_detail s ON ti.stock_detail_id = s.id
+            WHERE ti.transaction_id = ?
+        `, [id]);
+
+        // Fetch customer details if id exists
+        let customer = null;
+        if (transaction.customer_id) {
+            const [custResults] = await db.promise().query('SELECT * FROM customerDetails WHERE id = ?', [transaction.customer_id]);
+            if (custResults.length > 0) customer = custResults[0];
+        } else {
+            // Construct temp customer object from transaction columns
+            customer = {
+                name: transaction.customer_name,
+                mobile_no: transaction.customer_mobile
+            };
+        }
+
+        res.json({ success: true, transaction, items, customer });
+
+    } catch (err) {
+        console.error('Error fetching details:', err);
+        res.status(500).json({ success: false, error: 'Database error' });
+    }
+});
+
+// NEW: Update Transaction (Core Logic for Returns/Exchanges)
+router.post('/update-transaction', requireAuth, async (req, res) => {
+    const { transactionId, items, summary, paymentMethod, customer } = req.body;
+    const userId = req.session.code || 'PHARM-ADMIN';
+
+    if (!transactionId || !items || items.length === 0 || !summary) {
+        return res.status(400).json({ success: false, error: 'Incomplete update data' });
+    }
+
+    let connection;
+    try {
+        connection = await db.promise().getConnection();
+        await connection.beginTransaction();
+
+        // 1. Fetch OLD items to reverse stock
+        const [oldItems] = await connection.query(
+            'SELECT * FROM transaction_items WHERE transaction_id = ?',
+            [transactionId]
+        );
+
+        if (oldItems.length === 0) {
+            throw new Error('Original transaction items not found');
+        }
+
+        // 2. Stock Reversal: Add quantities BACK to inventory
+        // We do this blindly for all old items
+        for (const item of oldItems) {
+            if (item.dose_dispensing && item.dose_stock_id) {
+                // Return loose doses
+                await connection.query(
+                    'UPDATE import_stock_detail SET loose_quantity = loose_quantity + ? WHERE id = ?',
+                    [item.quantity, item.dose_stock_id] // Note: in DB 'quantity' column stores the dose count for dose items
+                );
+            } else if (!item.is_manual && item.stock_detail_id) {
+                // Return full units
+                await connection.query(
+                    'UPDATE import_stock_detail SET quantity = quantity + ? WHERE id = ?',
+                    [item.quantity, item.stock_detail_id]
+                );
+            }
+        }
+
+        // 3. Stock Deduction: Deduct NEW quantities from inventory
+        // This effectively handles "Delta" because we already added everything back
+        const stockUpdateErrors = [];
+        for (const item of items) {
+            if (item.dose_dispensing) {
+                const [updateResult] = await connection.query(
+                    'UPDATE import_stock_detail SET loose_quantity = loose_quantity - ? WHERE id = ? AND loose_quantity >= ?',
+                    [item.dose_quantity, item.dose_stock_id, item.dose_quantity]
+                );
+                if (updateResult.affectedRows === 0) {
+                    stockUpdateErrors.push({ item: item.item_name, reason: 'Insufficient loose doses (after return adjustment).' });
+                }
+            } else if (!item.is_manual && item.stock_detail_id) {
+                const [updateResult] = await connection.query(
+                    'UPDATE import_stock_detail SET quantity = quantity - ? WHERE id = ? AND quantity >= ?',
+                    [item.quantity, item.stock_detail_id, item.quantity]
+                );
+                if (updateResult.affectedRows === 0) {
+                    stockUpdateErrors.push({ item: item.item_name, reason: 'Insufficient stock (after return adjustment).' });
+                }
+            }
+        }
+
+        if (stockUpdateErrors.length > 0) {
+            await connection.rollback();
+            return res.status(400).json({ success: false, message: 'Stock unavailable for new selection', errors: stockUpdateErrors });
+        }
+
+        // 4. Update Transaction Header
+        // Set original_amount only if it's currently NULL (first edit)
+        // Store current total_amount into original_amount if it's the first time
+        await connection.query(
+            `UPDATE transactions 
+             SET original_amount = COALESCE(original_amount, total_amount),
+                 total_amount = ?, 
+                 discount_amount = ?, 
+                 discount_type = ?,
+                 payment_method = ?,
+                 is_modified = TRUE,
+                 status = 'completed',
+                 customer_name = COALESCE(?, customer_name),
+                 customer_mobile = COALESCE(?, customer_mobile)
+             WHERE id = ?`,
+            [
+                summary.totalAmount,
+                summary.discountAmount || 0,
+                summary.discountType || 'fixed',
+                paymentMethod,
+                customer ? customer.name : null,
+                customer ? customer.mobile : null,
+                transactionId
+            ]
+        );
+
+        // 5. Replace Transaction Items
+        // Delete all old items
+        await connection.query('DELETE FROM transaction_items WHERE transaction_id = ?', [transactionId]);
+
+        // Insert new items
+        for (const item of items) {
+            await connection.query(
+                `INSERT INTO transaction_items 
+                (transaction_id, stock_detail_id, item_name, item_description, mrp, selling_price, quantity, total_price, location, is_manual, dose_dispensing, dose_stock_id, dose_quantity, dose_unit_price, dosage_schedule, dosage_days) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    transactionId,
+                    item.stock_detail_id,
+                    item.item_name,
+                    item.item_description || '',
+                    item.mrp || 0,
+                    item.selling_price || 0,
+                    item.quantity,
+                    item.total_price,
+                    item.location || '',
+                    item.is_manual || false,
+                    item.dose_dispensing || false,
+                    item.dose_stock_id || null,
+                    item.dose_quantity || null,
+                    item.dose_unit_price || null,
+                    item.dosage_schedule || null,
+                    item.dosage_days || 1
+                ]
+            );
+        }
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            transactionId,
+            message: 'Transaction updated successfully',
+            billNumber: (await connection.query('SELECT bill_number FROM transactions WHERE id = ?', [transactionId]))[0][0].bill_number
+        });
+
+    } catch (err) {
+        if (connection) await connection.rollback();
+        console.error('Update transaction error:', err);
+        res.status(500).json({ success: false, error: 'Update failed: ' + err.message });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // Customer transactions
 router.get('/customer-transactions', requireAuth, async (req, res) => {
     const { customerId } = req.query;
@@ -316,7 +540,7 @@ router.get('/generate-pdf/:transactionId', requireAuth, async (req, res) => {
             LEFT JOIN customerDetails c ON t.customer_id = c.id 
             WHERE t.id = ?
         `, [transactionId]);
-        
+
         if (transactions.length === 0) return res.status(404).json({ success: false, error: 'Transaction not found' });
 
         const [items] = await db.promise().query('SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY id', [transactionId]);
@@ -568,16 +792,16 @@ async function generateBillPDF(doc, transaction, items) {
             const rootDir = path.join(__dirname, '..', '..');
             const logoPath = path.join(rootDir, 'img', 'KiranCareWellnessLogo.png');
             const signaturePath = path.join(rootDir, 'img', 'sign_2.png');
-            
+
             // Fonts - Registering Custom Fonts
             const fontRegular = path.join(__dirname, '..', 'fonts', 'Roboto-Regular.ttf');
             const fontBold = path.join(__dirname, '..', 'fonts', 'Roboto-Bold.ttf');
-            
+
             // Fallback to standard fonts if custom ones aren't found
             // Check if fs.existsSync throws (permission issues)
             let regularFontName = 'Helvetica';
             let boldFontName = 'Helvetica-Bold';
-            
+
             try {
                 if (fs.existsSync(fontRegular)) {
                     doc.registerFont('Roboto-Regular', fontRegular);
@@ -592,12 +816,12 @@ async function generateBillPDF(doc, transaction, items) {
             }
 
             // Colors & Config
-            const colors = { 
-                primary: '#00712D', 
-                secondary: '#D5ED9F', 
-                accent: '#FF9100', 
-                dark: '#1a202c', 
-                gray: '#718096', 
+            const colors = {
+                primary: '#00712D',
+                secondary: '#D5ED9F',
+                accent: '#FF9100',
+                dark: '#1a202c',
+                gray: '#718096',
                 lightGray: '#F7FAFC',
                 border: '#E2E8F0'
             };
@@ -612,7 +836,7 @@ async function generateBillPDF(doc, transaction, items) {
             };
 
             const txnDate = safeDate(transaction.transaction_date || transaction.created_at);
-            
+
             // Layout Constants
             const margins = { top: 40, left: 40, right: 40, bottom: 40 };
             const width = doc.page.width - margins.left - margins.right;
@@ -630,26 +854,26 @@ async function generateBillPDF(doc, transaction, items) {
 
                 // Company Name
                 doc.font(boldFontName).fontSize(20).fillColor(colors.primary)
-                   .text('Kiran Care Wellness', margins.left + 60, y);
-                
+                    .text('Kiran Care Wellness', margins.left + 60, y);
+
                 // Tagline/Subtitle
                 doc.font(regularFontName).fontSize(9).fillColor(colors.gray)
-                   .text('Generic Medical Store', margins.left + 60, y + 22);
+                    .text('Generic Medical Store', margins.left + 60, y + 22);
 
                 // Right-aligned Invoice Title
                 doc.font(boldFontName).fontSize(24).fillColor(colors.dark)
-                   .text('INVOICE', 0, y, { align: 'right', width: width + margins.left });
-                
+                    .text('INVOICE', 0, y, { align: 'right', width: width + margins.left });
+
                 // Store Info (Centered/Below header for clean look)
                 const startY = y + 60;
                 doc.moveTo(margins.left, startY).lineTo(doc.page.width - margins.right, startY).strokeColor(colors.border).lineWidth(1).stroke();
-                
+
                 // Contact Details Row
                 doc.font(regularFontName).fontSize(8).fillColor(colors.dark)
-                   .text('Shop no. A1, Sai Darshan Apt., Alkapuri Road, Nalasopara (E) 401209', margins.left, startY + 10, { width: width, align: 'center' })
-                   .text('Mobile: 9076828408, 9900235218  |  Email: kirancarewellness@gmail.com', margins.left, startY + 22, { width: width, align: 'center' })
-                   .text('Drug Lic: MH-PL1-578747, MH-PL1-578748, MH-PL1-581222, MH-PL1-581221', margins.left, startY + 34, { width: width, align: 'center' });
-                
+                    .text('Shop no. A1, Sai Darshan Apt., Alkapuri Road, Nalasopara (E) 401209', margins.left, startY + 10, { width: width, align: 'center' })
+                    .text('Mobile: 9076828408, 9900235218  |  Email: kirancarewellness@gmail.com', margins.left, startY + 22, { width: width, align: 'center' })
+                    .text('Drug Lic: MH-PL1-578747, MH-PL1-578748, MH-PL1-581222, MH-PL1-581221', margins.left, startY + 34, { width: width, align: 'center' });
+
                 return startY + 55;
             };
 
@@ -658,17 +882,17 @@ async function generateBillPDF(doc, transaction, items) {
             // --- Bill & Customer Details Grid ---
             const detailsTop = currentY;
             const colWidth = width / 2;
-            
+
             // Left Column: Bill Details
             doc.font(boldFontName).fontSize(10).fillColor(colors.primary).text('INVOICE DETAILS', margins.left, detailsTop);
             doc.rect(margins.left, detailsTop + 15, colWidth - 10, 65).fill(colors.lightGray);
-            
+
             doc.font(boldFontName).fontSize(9).fillColor(colors.dark).text('Bill Number:', margins.left + 10, detailsTop + 25);
             doc.font(regularFontName).text(safeText(transaction.bill_number, 'N/A'), margins.left + 80, detailsTop + 25);
-            
+
             doc.font(boldFontName).text('Date:', margins.left + 10, detailsTop + 40);
             doc.font(regularFontName).text(txnDate.toLocaleDateString('en-IN'), margins.left + 80, detailsTop + 40);
-            
+
             doc.font(boldFontName).text('Time:', margins.left + 10, detailsTop + 55);
             doc.font(regularFontName).text(txnDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }), margins.left + 80, detailsTop + 55);
 
@@ -682,7 +906,7 @@ async function generateBillPDF(doc, transaction, items) {
 
             doc.font(boldFontName).text('Mobile:', col2X + 10, detailsTop + 40);
             doc.font(regularFontName).text(safeText(transaction.customer_mobile, 'N/A'), col2X + 60, detailsTop + 40);
-            
+
             doc.font(boldFontName).text('Payment:', col2X + 10, detailsTop + 55);
             doc.font(regularFontName).text(safeText(transaction.payment_method, 'CASH').toUpperCase(), col2X + 60, detailsTop + 55);
 
@@ -702,7 +926,7 @@ async function generateBillPDF(doc, transaction, items) {
             currentY = drawTableHead(currentY);
 
             let subtotal = 0;
-            
+
             if (Array.isArray(items)) {
                 items.forEach((item, index) => {
                     // Check for page break
@@ -715,19 +939,19 @@ async function generateBillPDF(doc, transaction, items) {
                     // Zebra Striping
                     const bgColor = index % 2 === 0 ? '#FFFFFF' : colors.lightGray;
                     const rowHeight = item.item_description ? 35 : 25; // Taller row if description exists
-                    
+
                     doc.rect(margins.left, currentY, width, rowHeight).fill(bgColor);
-                    
+
                     // Row Content
                     doc.font(regularFontName).fontSize(9).fillColor(colors.dark);
-                    
+
                     // Item Name & Desc
                     doc.text(safeText(item.item_name), margins.left + 10, currentY + 8, { width: 220, lineBreak: false, ellipsis: true });
                     if (item.item_description) {
                         doc.fontSize(7).fillColor(colors.gray)
-                           .text(safeText(item.item_description), margins.left + 10, currentY + 20, { width: 220, lineBreak: false, ellipsis: true });
+                            .text(safeText(item.item_description), margins.left + 10, currentY + 20, { width: 220, lineBreak: false, ellipsis: true });
                     }
-                    
+
                     doc.font(regularFontName).fontSize(9).fillColor(colors.dark);
                     doc.text(formatCurrency(item.selling_price), margins.left + 240, currentY + 8, { width: 80, align: 'right' });
                     doc.text(safeText(item.quantity, '0'), margins.left + 330, currentY + 8, { width: 50, align: 'center' });
@@ -739,7 +963,7 @@ async function generateBillPDF(doc, transaction, items) {
             }
 
             // --- Financial Summary & Footer ---
-            
+
             // Ensure space for summary
             if (currentY > doc.page.height - 200) {
                 doc.addPage();
@@ -753,9 +977,9 @@ async function generateBillPDF(doc, transaction, items) {
 
             // Draw Summary Box
             doc.rect(summaryX - 10, currentY, summaryWidth + 10, 100).fill(colors.lightGray).stroke(colors.border).lineWidth(1);
-            
+
             let summaryY = currentY + 10;
-            
+
             // Subtotal
             doc.font(regularFontName).fontSize(10).fillColor(colors.dark).text('Subtotal:', summaryX, summaryY);
             doc.text(formatCurrency(subtotal), summaryX, summaryY, { width: summaryWidth, align: 'right' });
@@ -788,7 +1012,7 @@ async function generateBillPDF(doc, transaction, items) {
 
             // --- Footer Terms & Thank You ---
             let footerY = doc.page.height - 130;
-            
+
             // Terms
             doc.rect(margins.left, footerY, width, 55).fill('#F0FFF4').stroke(colors.primary).lineWidth(0.5);
             doc.font(boldFontName).fontSize(9).fillColor(colors.primary).text('TERMS & CONDITIONS:', margins.left + 10, footerY + 8);
@@ -799,10 +1023,10 @@ async function generateBillPDF(doc, transaction, items) {
 
             // Thank you note
             doc.font(boldFontName).fontSize(10).fillColor(colors.primary)
-               .text('Thank You for Choosing Kiran Care Wellness!', 0, footerY + 70, { align: 'center', width: doc.page.width });
-            
+                .text('Thank You for Choosing Kiran Care Wellness!', 0, footerY + 70, { align: 'center', width: doc.page.width });
+
             doc.font(regularFontName).fontSize(8).fillColor(colors.gray)
-               .text('This is a computer generated invoice.', 0, footerY + 85, { align: 'center', width: doc.page.width });
+                .text('This is a computer generated invoice.', 0, footerY + 85, { align: 'center', width: doc.page.width });
 
             resolve();
         } catch (error) {

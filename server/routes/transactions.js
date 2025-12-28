@@ -218,6 +218,18 @@ router.post('/save-transaction', async (req, res) => {
             }
         }
 
+        // Fallback to Walk-in Customer if no customer identified
+        if (!customerId) {
+            const [walkIn] = await connection.execute("SELECT id FROM customerDetails WHERE mobile_no = '0000000000'");
+            if (walkIn.length > 0) {
+                customerId = walkIn[0].id;
+            } else {
+                const [res] = await connection.execute("INSERT INTO customerDetails (name, mobile_no) VALUES ('Walk-in Customer', '0000000000')");
+                customerId = res.insertId;
+            }
+             console.log('Assigned to Walk-in Customer ID:', customerId);
+        }
+
         // 2. Create transaction record
         const billNumber = generateBillNumber();
         console.log('Generated bill number:', billNumber);

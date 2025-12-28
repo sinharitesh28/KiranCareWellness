@@ -1,10 +1,11 @@
 // server/app.js
-const express = require('express');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+const express = require('express');
 const session = require('express-session');
 const authRoutes = require('./routes/authRoutes');
-const requireAuth = require('./middleware/auth'); 
-const templateRoutes = require('./routes/templateRoutes'); 
+const requireAuth = require('./middleware/auth');
+const templateRoutes = require('./routes/templateRoutes');
 const stockRoutes = require('./routes/stockRoutes');
 const barcodeRoutes = require('./routes/barcodeRoutes'); // NEW: Add barcode routes
 const dispenseRoutes = require('./routes/dispenseRoutes');
@@ -12,7 +13,9 @@ const transactionRoutes = require('./routes/transactions');
 const analyticsRoutes = require('./routes/analyticsRoutes'); // NEW: Analytics routes
 const customerRoutes = require('./routes/customerRoutes'); // NEW: Customer routes
 const userRoutes = require('./routes/userRoutes'); // NEW: User management routes
-require('./services/telegramService'); // NEW: Initialize Telegram Bot Service
+const telegramRoutes = require('./routes/telegramRoutes'); // NEW: Telegram dashboard routes
+const { launchBot } = require('./services/telegramService'); // NEW: Initialize Telegram Bot Service
+launchBot();
 
 const app = express();
 
@@ -34,7 +37,7 @@ app.use('/auth', authRoutes);
 // serve login page explicitly at / (DO NOT PROTECT THIS ROUTE)
 app.get('/', (req, res) => {
     if (req.session && req.session.code) {
-        return res.redirect('/index.html'); 
+        return res.redirect('/index.html');
     }
     res.sendFile(path.join(__dirname, '..', 'logIn.html'));
 });
@@ -44,7 +47,7 @@ app.use(express.static(path.join(__dirname, '..')));
 
 // 👇 APPLY AUTH MIDDLEWARE TO ALL REMAINING ROUTES
 const protectedRouter = express.Router();
-protectedRouter.use(requireAuth); 
+protectedRouter.use(requireAuth);
 
 // Protected routes
 protectedRouter.get('/index.html', (req, res) => {
@@ -72,6 +75,10 @@ protectedRouter.get('/UserManagement.html', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'html', 'UserManagement.html'));
 });
 
+protectedRouter.get('/TelegramDashboard.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'html', 'TelegramDashboard.html'));
+});
+
 
 // Use the protected router
 app.use(protectedRouter);
@@ -85,20 +92,25 @@ app.use('/api/dispense', transactionRoutes);
 app.use('/api/analytics', analyticsRoutes); // NEW: Analytics API
 app.use('/api/customers', customerRoutes); // NEW: Customer API
 app.use('/api/users', userRoutes); // NEW: User API
+app.use('/api/telegram', telegramRoutes); // NEW: Telegram API
 
 // simple error handler
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    
+
     if (res.headersSent) {
         return next(err);
     }
-    
-    res.status(500).json({ 
-        error: "Internal Server Error", 
-        message: err.message 
+
+    res.status(500).json({
+        error: "Internal Server Error",
+        message: err.message
     });
 });
+
+// Start Cron Jobs
+const cleanupDrafts = require('./cron/draftCleanup');
+cleanupDrafts();
 
 const PORT = 3000;
 app.listen(PORT, () => {

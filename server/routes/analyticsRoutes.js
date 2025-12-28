@@ -112,41 +112,71 @@ router.get('/stock-status', requireAuth, async (req, res) => {
 // 3. ABC Analysis
 router.get('/abc-analysis', requireAuth, async (req, res) => {
     try {
-        const { period, startDate, endDate } = req.query;
-        const { dateCondition, params } = getDateCondition(period, startDate, endDate);
-
-        // Calculate consumption value for each item
-        // Using Sales Value (Revenue) for ABC Classification
+        // We ignore date filters for Inventory ABC Analysis as it's a snapshot of CURRENT stock
+        // Logic: 
+        // 1. Get current Quantity (Unit Count) for each item
+        // 2. Get Last Import Rate (Cost Price)
+        // 3. Calculate Value = Quantity * Last Rate
+        
         const abcSql = `
             SELECT 
-                ti.item_name,
-                SUM(ti.total_price) as consumption_value
-            FROM transaction_items ti
-            JOIN transactions t ON ti.transaction_id = t.id
-            WHERE t.status = 'completed' ${dateCondition}
-            GROUP BY ti.item_name
-            ORDER BY consumption_value DESC
+                d.item_name,
+                SUM(d.quantity) as unit_count,
+                (
+                    SELECT d2.rate
+                    FROM import_stock_detail d2
+                    JOIN import_stock_master m2 ON d2.master_id = m2.id
+                    WHERE d2.item_name = d.item_name
+                    ORDER BY m2.import_date DESC, d2.id DESC
+                    LIMIT 1
+                ) as last_import_rate
+            FROM import_stock_detail d
+            GROUP BY d.item_name
+            ORDER BY unit_count DESC
         `;
 
-        const [results] = await db.promise().query(abcSql, params);
+        const [results] = await db.promise().query(abcSql);
 
-        // Perform ABC Classification logic
-        const totalValue = results.reduce((sum, item) => sum + parseFloat(item.consumption_value), 0);
-        let accumulatedValue = 0;
-        
-        const classifiedData = results.map(item => {
-            const val = parseFloat(item.consumption_value);
-            accumulatedValue += val;
-            const percentage = (accumulatedValue / totalValue) * 100;
-            
-            let category = 'C';
-            if (percentage <= 70) category = 'A';
-            else if (percentage <= 90) category = 'B';
+        // Process data
+        let processedData = results.map(item => {
+            const count = parseFloat(item.unit_count) || 0;
+            const rate = parseFloat(item.last_import_rate) || 0;
+            const value = count * rate;
             
             return {
                 item_name: item.item_name,
-                value: val,
-                percentage: (val / totalValue) * 100,
+                unit_count: count,
+                last_import_rate: rate,
+                inventory_value: value
+            };
+        });
+
+        // Filter out negative stock if any (optional, but good for safety)
+        // processedData = processedData.filter(i => i.unit_count >= 0);
+
+        // Sort by Inventory Value DESC
+        processedData.sort((a, b) => b.inventory_value - a.inventory_value);
+
+        const totalValue = processedData.reduce((sum, item) => sum + item.inventory_value, 0);
+        
+        let accumulatedValue = 0;
+        
+        const classifiedData = processedData.map(item => {
+            accumulatedValue += item.inventory_value;
+            const percentage = totalValue > 0 ? (item.inventory_value / totalValue) * 100 : 0;
+            const cumulativePercentage = totalValue > 0 ? (accumulatedValue / totalValue) * 100 : 0;
+            
+            let category = 'C';
+            if (cumulativePercentage <= 70) category = 'A';
+            else if (cumulativePercentage <= 90) category = 'B';
+            
+            return {
+                item_name: item.item_name,
+                unit_count: item.unit_count,
+                unit_rate: item.last_import_rate,
+                value: item.inventory_value, // Total Inventory Value
+                percentage: percentage,
+                cumulative_percentage: cumulativePercentage,
                 category: category
             };
         });
@@ -162,6 +192,38 @@ router.get('/abc-analysis', requireAuth, async (req, res) => {
     } catch (err) {
         console.error('Error fetching ABC data:', err);
         res.status(500).json({ success: false, error: 'Database error' });
+    }
+});
+
+// 4. Delete Stock Item (for housekeeping 0 qty items)
+router.delete('/stock-item/:itemName', requireAuth, async (req, res) => {
+    const itemName = req.params.itemName;
+    
+    if (!itemName) {
+        return res.status(400).json({ success: false, error: 'Item name is required' });
+    }
+
+    try {
+        // Verify if the item has 0 quantity before deleting
+        const checkSql = `
+            SELECT SUM(quantity) as total_qty 
+            FROM import_stock_detail 
+            WHERE item_name = ?
+        `;
+        const [checkResult] = await db.promise().query(checkSql, [itemName]);
+        const totalQty = checkResult[0].total_qty || 0;
+
+        if (totalQty > 0) {
+            return res.status(400).json({ success: false, error: 'Cannot delete item with positive stock quantity.' });
+        }
+
+        const deleteSql = 'DELETE FROM import_stock_detail WHERE item_name = ?';
+        await db.promise().query(deleteSql, [itemName]);
+
+        res.json({ success: true, message: `Item '${itemName}' deleted successfully.` });
+    } catch (err) {
+        console.error('Error deleting stock item:', err);
+        res.status(500).json({ success: false, error: 'Database error deleting item.' });
     }
 });
 

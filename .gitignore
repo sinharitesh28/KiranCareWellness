@@ -28,6 +28,7 @@ coverage.xml
 .env
 .env.*
 server/.env
+server/test_db.js
 
 # IDEs
 .vs/

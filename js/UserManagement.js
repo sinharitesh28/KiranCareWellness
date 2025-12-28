@@ -35,26 +35,36 @@ async function fetchUsers() {
             allUsers = data.users;
             renderUsers(allUsers);
         } else {
-            tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">Failed to load users: ${data.error}</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-red-500">Failed to load users: ${data.error}</td></tr>`;
         }
     } catch (error) {
-        tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">Network error loading users.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-red-500">Network error loading users.</td></tr>`;
     }
 }
 
 // Render users into the table
 function renderUsers(users) {
     const tableBody = document.getElementById('usersTableBody');
+    // Update header if not already updated (brute force check not needed if we replace entire body rows, but header is static HTML)
+    // Actually, I should update the HTML header too, but I can't easily do that from here without query selector.
+    // Let's assume the user will update HTML header manually or I will inject it via JS?
+    // Better to stick to row rendering. The columns count changed.
+    
     tableBody.innerHTML = '';
     
     if (users.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-gray-500">No users found.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-gray-500">No users found.</td></tr>';
         return;
     }
     
     users.forEach(user => {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 transition-colors group';
+
+        const telegramStatus = user.telegram_chat_id 
+            ? `<span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-600 border border-blue-200"><i class="fab fa-telegram-plane mr-1"></i>Linked</span>`
+            : `<span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-gray-400 border border-gray-200">Not Linked</span>`;
+
         row.innerHTML = `
             <td class="p-4 font-mono text-xs text-gray-500">${user.code}</td>
             <td class="p-4 font-bold text-gray-800">${user.name}</td>
@@ -68,8 +78,14 @@ function renderUsers(users) {
                 </span>
             </td>
             <td class="p-4 text-center">
+                ${telegramStatus}
+            </td>
+            <td class="p-4 text-center">
                 <div class="flex justify-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onclick="editUser(${user.code})" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition" title="Edit User">
+                    <button onclick="connectTelegram(${user.code}, '${user.name}')" class="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition" title="Connect Telegram">
+                        <i class="fab fa-telegram"></i>
+                    </button>
+                    <button onclick="editUser(${user.code})" class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition" title="Edit User">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button onclick="deleteUser(${user.code})" class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition ${user.code == 3 ? 'hidden' : ''}" title="Delete User">
@@ -90,18 +106,73 @@ function setupEventListeners() {
     const cancelBtn = document.getElementById('cancelBtn');
     const userForm = document.getElementById('userForm');
 
+    // Telegram Modal
+    const teleModal = document.getElementById('connectTelegramModal');
+    const closeTeleBtn = document.getElementById('closeTelegramModal');
+
     addBtn.onclick = () => openModal();
     closeBtn.onclick = () => closeModal();
     cancelBtn.onclick = () => closeModal();
     
+    if (closeTeleBtn) {
+        closeTeleBtn.onclick = () => {
+            teleModal.classList.add('hidden');
+            teleModal.classList.remove('flex');
+        };
+    }
+    
     window.onclick = (e) => {
         if (e.target == modal) closeModal();
+        if (e.target == teleModal) {
+            teleModal.classList.add('hidden');
+            teleModal.classList.remove('flex');
+        }
     }
 
     userForm.onsubmit = async (e) => {
         e.preventDefault();
         saveUser();
     };
+}
+
+// Connect Telegram Logic
+async function connectTelegram(userCode, userName) {
+    const modal = document.getElementById('connectTelegramModal');
+    const qrContainer = document.getElementById('telegramQrCode');
+    
+    // Generate a secure token
+    // Format: LINK_{EmployeeCode}_{RandomString}
+    const secretToken = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+    
+    let botName = 'KiranCareBot'; // Default fallback
+    try {
+        const res = await fetch('/api/telegram/info');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.username) {
+                botName = data.username;
+            }
+        } else {
+            console.warn('Bot info API unavailable, using default username.');
+        }
+    } catch (e) {
+        console.warn('Could not fetch bot username, using default:', botName);
+    }
+
+    const link = `https://t.me/${botName}?start=LINK_${userCode}_${secretToken}`;
+
+    qrContainer.innerHTML = '';
+    new QRCode(qrContainer, {
+        text: link,
+        width: 200,
+        height: 200,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+    });
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
 }
 
 // Open Modal (Add/Edit)
@@ -208,6 +279,7 @@ async function deleteUser(code) {
 // Global exposure for onclick handlers
 window.editUser = openModal;
 window.deleteUser = deleteUser;
+window.connectTelegram = connectTelegram;
 
 // Helper: Show Toast Message
 function showMessage(msg, type = 'info') {

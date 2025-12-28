@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const transporter = require('../mailer');
+const bot = require('../bot/bot'); // Import Telegram Bot
 // Import the requireAuth middleware
 const requireAuth = require('../middleware/auth');
 
@@ -20,10 +21,10 @@ router.post('/send-otp', async (req, res) => {
         const employeeCode = String((req.body && req.body.employeeCode) || '').trim();
         if (!employeeCode) return res.status(400).json({ error: 'Employee code required' });
 
-        // table `employeedetails` columns: code, name, position, gmail, contact_no, branch
-        // select gmail and alias to email
+        // table `employeedetails` columns: code, name, position, gmail, contact_no, branch, telegram_chat_id
+        // select gmail and telegram_chat_id
         const [results] = await db.promise().query(
-            'SELECT gmail AS email FROM employeedetails WHERE code = ?',
+            'SELECT gmail AS email, telegram_chat_id, name FROM employeedetails WHERE code = ?',
             [employeeCode]
         );
 
@@ -31,8 +32,8 @@ router.post('/send-otp', async (req, res) => {
             return res.status(404).json({ error: 'Invalid employee code' });
         }
 
-        const email = results[0].email;
-        if (!email) {
+        const user = results[0];
+        if (!user.email) {
             return res.status(500).json({ error: 'No email configured for this employee' });
         }
 
@@ -44,13 +45,27 @@ router.post('/send-otp', async (req, res) => {
 
         const mailOptions = {
             from: transporter.options && transporter.options.auth ? transporter.options.auth.user : 'no-reply@example.com',
-            to: email,
+            to: user.email,
             subject: 'Kiran Care Wellness - Your OTP',
             text: `Your OTP for Kiran Care Wellness login is: ${otp}. It will expire in 5 minutes.`
         };
 
+        // Send Email
         await transporter.sendMail(mailOptions);
-        res.json({ message: 'OTP sent to official email id' });
+        let message = 'OTP sent to official email id';
+
+        // Send via Telegram if linked
+        if (user.telegram_chat_id && bot) {
+            try {
+                await bot.telegram.sendMessage(user.telegram_chat_id, `🔐 *Login OTP*\n\nYour OTP is: *${otp}*\n\nValid for 5 minutes.`, { parse_mode: 'Markdown' });
+                message += ' and Telegram Bot';
+            } catch (teleErr) {
+                console.error('Failed to send Telegram OTP:', teleErr.message);
+                // Don't fail the request, just log it
+            }
+        }
+
+        res.json({ message });
     } catch (err) {
         console.error('send-otp error:', err);
         res.status(500).json({ error: 'Failed to send OTP' });
@@ -81,7 +96,11 @@ router.post('/validate-otp', (req, res) => {
         if (req.session) {
             req.session.code = employeeCode; 
         }
-        res.json({ message: 'OTP validated' });
+        
+        // Generate Token (Base64 of employeeCode) for API clients
+        const token = Buffer.from(employeeCode).toString('base64');
+        
+        res.json({ message: 'OTP validated', token });
     } catch (err) {
         console.error('validate-otp error:', err);
         res.status(500).json({ error: 'Validation failed' });

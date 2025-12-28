@@ -46,7 +46,7 @@ router.get('/me', requireAuth, async (req, res) => {
 router.get('/list', requireAuth, requireAdmin, async (req, res) => {
     try {
         const [results] = await db.promise().query(
-            'SELECT code, name, position, gmail, contact_no, branch, is_admin FROM employeedetails'
+            'SELECT code, name, position, gmail, contact_no, branch, is_admin, telegram_chat_id FROM employeedetails'
         );
         res.json({ success: true, users: results });
     } catch (err) {

@@ -2,8 +2,11 @@
 
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
+    user: process.env.DB_USER || 'root',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'kiranrxsmart',
     database: process.env.DB_NAME || 'kiranrxsmart',
     waitForConnections: true,
     connectionLimit: 10,
@@ -20,16 +23,16 @@ function addColumnIfNotExists(tableName, columnName, columnDefinition) {
             AND table_name = ? 
             AND column_name = ?
         `;
-        
+
         db.query(checkColumnSql, [db.config.database, tableName, columnName], (err, results) => {
             if (err) {
                 console.error(`Error checking column ${columnName}:`, err);
                 reject(err);
                 return;
             }
-            
+
             const columnExists = results[0].column_exists > 0;
-            
+
             if (!columnExists) {
                 const addColumnSql = `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`;
                 db.query(addColumnSql, (addErr) => {
@@ -76,8 +79,8 @@ CREATE TABLE IF NOT EXISTS importTemplate (
     expiry_date_format VARCHAR(50)
 );`;
 
-    // SQL to create Import Stock Master Table WITH invoice_date
-    const createImportStockMasterTable = `
+// SQL to create Import Stock Master Table WITH invoice_date
+const createImportStockMasterTable = `
     CREATE TABLE IF NOT EXISTS import_stock_master (
         id INT AUTO_INCREMENT PRIMARY KEY,
         template_id INT NOT NULL,
@@ -89,8 +92,8 @@ CREATE TABLE IF NOT EXISTS importTemplate (
         FOREIGN KEY (template_id) REFERENCES importTemplate(id)
     );`;
 
-    // SQL to create Import Stock Detail Table WITH ALL COLUMNS
-    const createImportStockDetailTable = `
+// SQL to create Import Stock Detail Table WITH ALL COLUMNS
+const createImportStockDetailTable = `
 CREATE TABLE IF NOT EXISTS import_stock_detail (
     id INT AUTO_INCREMENT PRIMARY KEY,
     master_id INT NOT NULL,
@@ -112,8 +115,8 @@ CREATE TABLE IF NOT EXISTS import_stock_detail (
     FOREIGN KEY (master_id) REFERENCES import_stock_master(id)
 );`;
 
-    // SQL to create Barcode Print Log Table
-    const createBarcodePrintLogTable = `
+// SQL to create Barcode Print Log Table
+const createBarcodePrintLogTable = `
     CREATE TABLE IF NOT EXISTS barcode_print_log (
         id INT AUTO_INCREMENT PRIMARY KEY,
         stock_detail_id INT NOT NULL,
@@ -124,41 +127,41 @@ CREATE TABLE IF NOT EXISTS import_stock_detail (
         FOREIGN KEY (stock_detail_id) REFERENCES import_stock_detail(id)
     );`;
 
-    // Execute table creation queries
-    db.query(createImportTemplateTable, (err) => {
-        if (err) console.error('Error creating importTemplate table:', err.message);
-        else console.log('importTemplate table checked/created.');
-    });
+// Execute table creation queries
+db.query(createImportTemplateTable, (err) => {
+    if (err) console.error('Error creating importTemplate table:', err.message);
+    else console.log('importTemplate table checked/created.');
+});
 
-    db.query(createImportStockMasterTable, (err) => {
-        if (err) console.error('Error creating import_stock_master table:', err.message);
-        else console.log('import_stock_master table checked/created.');
-    });
-    
-    db.query(createImportStockDetailTable, (err) => {
-        if (err) console.error('Error creating import_stock_detail table:', err.message);
-        else console.log('import_stock_detail table checked/created.');
-    });
+db.query(createImportStockMasterTable, (err) => {
+    if (err) console.error('Error creating import_stock_master table:', err.message);
+    else console.log('import_stock_master table checked/created.');
+});
 
-        db.query(createBarcodePrintLogTable, (err) => {
+db.query(createImportStockDetailTable, (err) => {
+    if (err) console.error('Error creating import_stock_detail table:', err.message);
+    else console.log('import_stock_detail table checked/created.');
+});
 
-            if (err) console.error('Error creating barcode_print_log table:', err.message);
+db.query(createBarcodePrintLogTable, (err) => {
 
-            else console.log('barcode_print_log table checked/created.');
+    if (err) console.error('Error creating barcode_print_log table:', err.message);
 
-        });
+    else console.log('barcode_print_log table checked/created.');
 
-    
+});
 
-        // Add missing columns after a delay to ensure tables are created
 
-        setTimeout(() => {
+
+// Add missing columns after a delay to ensure tables are created
+
+setTimeout(() => {
     console.log('Checking and adding missing columns...');
-    
+
     const columnAdditions = [
         // Add missing columns to import_stock_master
         { table: 'import_stock_master', column: 'invoice_date', definition: 'DATE' },
-        
+
         // Add missing columns to import_stock_detail
         { table: 'import_stock_detail', column: 'item_desc', definition: 'VARCHAR(255)' },
         { table: 'import_stock_detail', column: 'manufacturer', definition: 'VARCHAR(255)' },
@@ -167,7 +170,7 @@ CREATE TABLE IF NOT EXISTS import_stock_detail (
         { table: 'import_stock_detail', column: 'loose_quantity', definition: 'INT DEFAULT 0' },
         { table: 'import_stock_detail', column: 'barcode', definition: 'VARCHAR(100)' },
         { table: 'import_stock_detail', column: 'barcode_printed', definition: 'BOOLEAN DEFAULT FALSE' },
-        
+
         // ADD THIS: Add packing_col to importTemplate table
         { table: 'importTemplate', column: 'packing_col', definition: 'VARCHAR(255)' }
     ];
@@ -188,7 +191,7 @@ CREATE TABLE IF NOT EXISTS import_stock_detail (
 
     processColumnAdditions();
 }, 2000);
- // Wait 2 seconds for tables to be created
+// Wait 2 seconds for tables to be created
 
 // TRANSACTION TABLES - Updated to make customer details optional
 // In db.js, add to the customerDetails table creation
@@ -207,7 +210,7 @@ CREATE TABLE IF NOT EXISTS customerDetails (
 // Add email column if it doesn't exist
 setTimeout(() => {
     console.log('Checking and adding customer email column...');
-    
+
     const customerColumnAdditions = [
         { table: 'customerDetails', column: 'email', definition: 'VARCHAR(255) NULL' }
     ];
@@ -336,7 +339,7 @@ db.query(createDoseStockTable, (err) => {
 // Add missing columns to transactions table
 setTimeout(() => {
     console.log('Checking and adding dose dispensing columns to transaction_items table...');
-    
+
     const transactionItemsColumnAdditions = [
         { table: 'transaction_items', column: 'dose_dispensing', definition: 'BOOLEAN DEFAULT FALSE' },
         { table: 'transaction_items', column: 'dose_stock_id', definition: 'INT NULL' },
@@ -347,7 +350,14 @@ setTimeout(() => {
         { table: 'transaction_items', column: 'dosage_days', definition: 'INT DEFAULT 1' }
     ];
 
+    // NEW: Add auditing columns to transactions table
+    const transactionColumnAdditions = [
+        { table: 'transactions', column: 'is_modified', definition: 'BOOLEAN DEFAULT FALSE' },
+        { table: 'transactions', column: 'original_amount', definition: 'DECIMAL(10,2) NULL' }
+    ];
+
     async function processTransactionItemsColumnAdditions() {
+        // Process items columns
         for (const addition of transactionItemsColumnAdditions) {
             try {
                 await addColumnIfNotExists(addition.table, addition.column, addition.definition);
@@ -356,7 +366,18 @@ setTimeout(() => {
                 console.error(`Failed to process column ${addition.column}:`, error);
             }
         }
-        console.log('All transaction_items dose dispensing column checks completed.');
+
+        // Process transactions columns
+        for (const addition of transactionColumnAdditions) {
+            try {
+                await addColumnIfNotExists(addition.table, addition.column, addition.definition);
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (error) {
+                console.error(`Failed to process column ${addition.column}:`, error);
+            }
+        }
+
+        console.log('All transaction schema checks completed.');
     }
 
     processTransactionItemsColumnAdditions();
@@ -365,7 +386,7 @@ setTimeout(() => {
 // Add missing columns to customerDetails table
 setTimeout(() => {
     console.log('Checking and adding extra columns to customerDetails table...');
-    
+
     const customerExtraColumnAdditions = [
         { table: 'customerDetails', column: 'telegram_chat_id', definition: 'VARCHAR(100) NULL' },
         { table: 'customerDetails', column: 'preferred_language', definition: "VARCHAR(10) DEFAULT 'en'" }
@@ -389,11 +410,11 @@ setTimeout(() => {
 // Add is_admin column to employeedetails
 setTimeout(() => {
     console.log('Checking and adding is_admin column to employeedetails table...');
-    
+
     async function setupEmployeeAdmin() {
         try {
             await addColumnIfNotExists('employeedetails', 'is_admin', 'BOOLEAN DEFAULT FALSE');
-            
+
             // Set user ID 3 as admin for now
             const updateAdminSql = 'UPDATE employeedetails SET is_admin = TRUE WHERE code = 3';
             db.query(updateAdminSql, (err) => {
@@ -407,5 +428,47 @@ setTimeout(() => {
 
     setupEmployeeAdmin();
 }, 5000);
+
+// Add telegram_chat_id to employeedetails
+setTimeout(() => {
+    console.log('Checking and adding telegram_chat_id to employeedetails table...');
+    addColumnIfNotExists('employeedetails', 'telegram_chat_id', 'VARCHAR(100) NULL')
+        .then(() => console.log('Employee Telegram ID column check completed.'))
+        .catch(err => console.error('Failed to add Employee Telegram ID column:', err));
+}, 5500);
+
+// Add Indexes
+setTimeout(() => {
+    console.log('Checking and adding indexes...');
+
+    const indexAdditions = [
+        { table: 'employeedetails', column: 'telegram_chat_id', indexName: 'idx_telegram_chat_id' },
+        { table: 'import_stock_detail', column: 'item_name', indexName: 'idx_item_name' },
+        { table: 'import_stock_detail', column: 'barcode', indexName: 'idx_barcode' }
+    ];
+
+    async function processIndexAdditions() {
+        for (const addition of indexAdditions) {
+            try {
+                // Check if index exists
+                const [rows] = await db.promise().query(
+                    `SELECT COUNT(1) as IndexIsThere FROM INFORMATION_SCHEMA.STATISTICS 
+                     WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
+                    [addition.table, addition.indexName]
+                );
+
+                if (rows[0].IndexIsThere === 0) {
+                    await db.promise().query(`CREATE INDEX ${addition.indexName} ON ${addition.table} (${addition.column})`);
+                    console.log(`Index ${addition.indexName} created on ${addition.table}`);
+                }
+            } catch (error) {
+                console.error(`Index check/create failed for ${addition.indexName}:`, error.message);
+            }
+        }
+        console.log('Index checks completed.');
+    }
+
+    processIndexAdditions();
+}, 6000);
 
 module.exports = db;

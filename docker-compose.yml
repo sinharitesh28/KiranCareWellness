@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Database Connection
+      # Use host.docker.internal to connect to host's MySQL on Windows/Mac
+      - DB_HOST=host.docker.internal
+      - DB_USER=${DB_USER:-root}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-kiranrxsmart}
+      
+      # Telegram Bot
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      
+      # Timezone
+      - TZ=Asia/Kolkata
+    volumes:
+      # Mount source code for live updates (optional/dev)
+      # - .:/usr/src/app
+      # Mount uploads directory to persist data
+      - ./server/uploads:/usr/src/app/server/uploads
+    restart: always

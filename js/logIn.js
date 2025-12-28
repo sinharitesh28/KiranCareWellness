@@ -183,6 +183,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const body = await res.json();
             
             if (res.ok) {
+                // Save token if present
+                if (body.token) {
+                    localStorage.setItem('authToken', body.token);
+                }
+
                 showHint(body.message || 'Authentication successful! Redirecting...', 'success');
                 // Stop the timer as validation is successful
                 stopTimer();

@@ -164,21 +164,25 @@
                     </div>
                 </div>
 
-                <!-- ABC Detailed Table -->
-                <div class="col-span-2 overflow-y-auto h-80 border rounded-lg">
-                    <table class="w-full text-sm text-left text-gray-600" id="abcTable">
-                        <thead class="bg-gray-50 text-gray-700 uppercase font-semibold sticky top-0">
-                            <tr>
-                                <th class="px-4 py-2">Item Name</th>
-                                <th class="px-4 py-2 text-right">Consumption Value</th>
-                                <th class="px-4 py-2 text-center">Class</th>
-                            </tr>
-                        </thead>
-                        <tbody id="abcTableBody" class="divide-y divide-gray-200">
-                            <!-- Populated by JS -->
-                        </tbody>
-                    </table>
-                </div>
+            <!-- ABC Detailed Table -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm text-left text-gray-600" id="abcTable">
+                    <thead class="bg-gray-50 text-gray-700 font-bold uppercase text-xs">
+                        <tr>
+                            <th class="px-4 py-3">Item Name</th>
+                            <th class="px-4 py-3 text-right">Unit Count (Present)</th>
+                            <th class="px-4 py-3 text-right">Unit Rate (Last Import)</th>
+                            <th class="px-4 py-3 text-right">% of Inv. Value</th>
+                            <th class="px-4 py-3 text-right">Cumulative %</th>
+                            <th class="px-4 py-3 text-center">ABC Rank</th>
+                            <th class="px-4 py-3 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="abcTableBody" class="divide-y divide-gray-200">
+                        <!-- ABC data populated here -->
+                    </tbody>
+                </table>
+            </div>
             </div>
         </section>
 

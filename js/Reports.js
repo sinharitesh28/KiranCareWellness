@@ -214,15 +214,53 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (item.category === 'B') colorClass = 'text-yellow-600 font-bold';
             else colorClass = 'text-red-600 font-bold';
 
+            const showDelete = item.unit_count === 0;
+            const safeItemName = item.item_name.replace(/'/g, "\\'"); // Escape single quotes for JS string
+            
+            const deleteBtn = showDelete ? 
+                `<button onclick="deleteItem('${safeItemName}')" class="text-red-500 hover:text-red-700 text-xs font-bold border border-red-500 rounded px-2 py-1 transition-colors">Remove</button>` : 
+                '<span class="text-gray-300 text-xs">-</span>';
+
             return `
-                <tr>
-                    <td class="px-4 py-2 font-medium">${item.item_name}</td>
-                    <td class="px-4 py-2 text-right">₹${parseFloat(item.value).toFixed(2)}</td>
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-4 py-2 font-medium text-gray-800">${item.item_name}</td>
+                    <td class="px-4 py-2 text-right text-gray-600">${item.unit_count}</td>
+                    <td class="px-4 py-2 text-right text-gray-600">₹${parseFloat(item.unit_rate).toFixed(2)}</td>
+                    <td class="px-4 py-2 text-right text-gray-600">${parseFloat(item.percentage).toFixed(2)}%</td>
+                    <td class="px-4 py-2 text-right text-gray-600">${parseFloat(item.cumulative_percentage).toFixed(2)}%</td>
                     <td class="px-4 py-2 text-center ${colorClass}">${item.category}</td>
+                    <td class="px-4 py-2 text-center">${deleteBtn}</td>
                 </tr>
             `;
         }).join('');
     }
+
+    // Global Delete Function
+    window.deleteItem = async function(itemName) {
+        if (!confirm(`Are you sure you want to delete item '${itemName}'? This action cannot be undone and will remove all stock records for this item.`)) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/analytics/stock-item/${encodeURIComponent(itemName)}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // Refresh the reports
+                document.getElementById('applyFilters').click();
+                
+                // Optional: Show a toast or small notification instead of alert
+                // For now, using alert as per common CLI/simple web app patterns unless a toast lib is present
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error deleting item:', error);
+            alert('Failed to delete item due to a network or server error.');
+        }
+    };
 
     // Global Export Function
     window.exportTableToCSV = function(tableId, filename) {
