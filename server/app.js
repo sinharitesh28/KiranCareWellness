@@ -3,6 +3,8 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const session = require('express-session');
+const MySQLStore = require('express-mysql-session')(session);
+const db = require('./db');
 const authRoutes = require('./routes/authRoutes');
 const requireAuth = require('./middleware/auth');
 const templateRoutes = require('./routes/templateRoutes');
@@ -23,9 +25,14 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// session store
+const sessionStore = new MySQLStore({}, db);
+
 // session (required by authRoutes to store employeeCode)
 app.use(session({
+    key: 'session_cookie_name',
     secret: 'change_this_to_a_strong_secret',
+    store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 24 * 60 * 60 * 1000 } // 1 day
@@ -43,7 +50,7 @@ app.get('/', (req, res) => {
 });
 
 // serve static files from project root
-app.use(express.static(path.join(__dirname, '..')));
+app.use(express.static(path.join(__dirname, '..'), { maxAge: '0' }));
 
 // 👇 APPLY AUTH MIDDLEWARE TO ALL REMAINING ROUTES
 const protectedRouter = express.Router();

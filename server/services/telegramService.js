@@ -195,18 +195,35 @@ async function scheduleRemindersForTransaction(transactionId) {
                 const day = currentDate.getDate().toString().padStart(2, '0');
                 const dateStr = `${year}-${month}-${day}`;
 
-                times.forEach(time => {
-                    if (/^\d{2}:\d{2}/.test(time)) {
-                        remindersValues.push([
-                            item.customer_id,
-                            transactionId,
-                            item.id,
-                            item.item_name,
-                            time,
-                            time + ':00',
-                            dateStr
-                        ]);
+                times.forEach(rawTime => {
+                    let time = rawTime.trim();
+                    let hours, minutes;
+
+                    if (/^\d{1,2}:\d{2}$/.test(time)) {
+                        [hours, minutes] = time.split(':');
+                    } else if (/^\d{1,2}$/.test(time)) {
+                        hours = time;
+                        minutes = '00';
+                    } else {
+                        return; // Skip invalid formats
                     }
+
+                    // Pad hours and minutes
+                    hours = hours.padStart(2, '0');
+                    minutes = minutes.padStart(2, '0');
+                    
+                    const formattedTime = `${hours}:${minutes}`;
+                    const scheduledTime = `${formattedTime}:00`;
+
+                    remindersValues.push([
+                        item.customer_id,
+                        transactionId,
+                        item.id,
+                        item.item_name,
+                        formattedTime, // dosage_time (HH:MM)
+                        scheduledTime, // scheduled_time (HH:MM:SS)
+                        dateStr
+                    ]);
                 });
             }
         }

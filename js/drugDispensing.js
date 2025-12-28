@@ -123,7 +123,14 @@ class MedicineDispensing {
         document.getElementById('connectTelegramBtn').addEventListener('click', () => this.openTelegramModal());
         document.getElementById('closeTelegramModal').addEventListener('click', () => this.closeTelegramModal());
         // Search events
-        document.getElementById('medicineSearch').addEventListener('input', (e) => this.handleSearchInput(e));
+        const searchInput = document.getElementById('medicineSearch');
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                this.handleSearchInput(e);
+            }, 300);
+        });
         document.getElementById('searchCategory').addEventListener('change', () => this.handleSearch());
         document.getElementById('clearSearch').addEventListener('click', () => this.clearSearch());
         document.getElementById('scanBarcode').addEventListener('click', () => this.openBarcodeScanner());
@@ -351,14 +358,21 @@ class MedicineDispensing {
         document.getElementById('telegramModal').classList.add('hidden');
     }
 
-    async handleSearchInput(event) {
+    handleSearchInput(event) {
         const query = event.target.value.trim();
 
-        if (query.length >= 2) {
-            await this.performSearch(query);
-        } else {
-            this.hideSearchDropdown();
+        // Debounce the search to prevent excessive API calls
+        if (this.searchTimeout) {
+            clearTimeout(this.searchTimeout);
         }
+
+        this.searchTimeout = setTimeout(async () => {
+            if (query.length >= 2) {
+                await this.performSearch(query);
+            } else {
+                this.hideSearchDropdown();
+            }
+        }, 300);
     }
 
     async performSearch(query) {
@@ -694,7 +708,7 @@ addTableRow(item) {
                 </td>
                 <td class="py-3 px-3 text-center">
                     <input type="text" class="w-24 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
-                           data-id="${item.id}" placeholder="09:00, 21:00" title="Enter times (HH:MM) separated by comma. e.g. 09:00, 14:00, 20:00">
+                           data-id="${item.id}" placeholder="09, 21" title="Enter times (HH or HH:MM) separated by comma. e.g. 09, 14, 20. Suggest adding between 08 to 22.">
                 </td>
                 <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">
@@ -736,7 +750,7 @@ addTableRow(item) {
                 </td>
                 <td class="py-3 px-3 text-center">
                     <input type="text" class="w-24 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
-                           data-id="${item.id}" placeholder="09:00, 21:00" title="Enter times (HH:MM) separated by comma">
+                           data-id="${item.id}" placeholder="09, 21" title="Enter times (HH or HH:MM) separated by comma. e.g. 09, 14, 20. Suggest adding between 08 to 22.">
                 </td>
                 <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">

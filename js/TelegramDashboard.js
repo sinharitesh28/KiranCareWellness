@@ -133,12 +133,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function formatDate(dateStr) {
         if (!dateStr || dateStr === 'N/A') return 'Never';
         const d = new Date(dateStr);
-        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit' });
     }
 
     // --- Auto Refresh Logic ---
     function startAutoRefresh() {
-        let seconds = 60;
+        let seconds = 3600; // 60 minutes
         refreshTimer.innerText = seconds;
 
         if (refreshInterval) clearInterval(refreshInterval);
@@ -147,8 +147,11 @@ document.addEventListener('DOMContentLoaded', () => {
             seconds--;
             refreshTimer.innerText = seconds;
             if (seconds <= 0) {
-                fetchAdherenceData();
-                seconds = 60;
+                const hour = new Date().getHours();
+                if (hour >= 8 && hour < 22) {
+                    fetchAdherenceData();
+                }
+                seconds = 3600;
             }
         }, 1000);
     }
