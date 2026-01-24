@@ -1,25 +1,25 @@
 steps:
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/kirancarewellness-app', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/kiran-service', '.']
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/kirancarewellness-app']
-  # Deploy container image to Cloud Run
+    args: ['push', 'gcr.io/$PROJECT_ID/kiran-service']
+  # Deploy container image to Cloud Run (Update existing service)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'kirancarewellness-app'
+      - 'kiran-service'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/kirancarewellness-app'
+      - 'gcr.io/$PROJECT_ID/kiran-service'
       - '--region'
-      - 'asia-south1'
+      - 'us-central1'
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      - '--port'
-      - '3000'
+      - '--set-env-vars'
+      - 'DB_HOST=gateway01.ap-southeast-1.prod.aws.tidbcloud.com,DB_PORT=4000,DB_USER=R1i3CzLULNJ54MZ.root,DB_PASSWORD=t9Vf3YcwcP0sSM4n,DB_NAME=test,TELEGRAM_BOT_TOKEN=8389761461:AAF-9xCgVAZej0Wqo57W9tLDVuIVhHt2EkM,TELEGRAM_BOT_USERNAME=Kiran_Care_Wellness_bot'
 images:
-  - 'gcr.io/$PROJECT_ID/kirancarewellness-app'
+  - 'gcr.io/$PROJECT_ID/kiran-service'
