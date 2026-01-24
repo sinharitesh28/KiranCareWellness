@@ -127,6 +127,74 @@ router.post('/extract-headers', [requireAuth, upload.single('template_file')], (
 });
 
 
+// Route to find a matching template based on file headers
+router.post('/find-matching-template', requireAuth, async (req, res) => {
+    try {
+        const { headers } = req.body;
+        
+        if (!headers || !Array.isArray(headers) || headers.length === 0) {
+            return res.status(400).json({ success: false, error: 'No headers provided for analysis.' });
+        }
+
+        // Fetch all templates
+        const allTemplatesQuery = 'SELECT * FROM importTemplate';
+        const templates = await query(allTemplatesQuery);
+
+        if (templates.length === 0) {
+            return res.json({ success: true, matchFound: false, message: 'No existing templates to match against.' });
+        }
+
+        let bestMatch = null;
+        const fileHeadersLower = headers.map(h => h.trim().toLowerCase());
+
+        // Iterate through templates to find a match
+        for (const template of templates) {
+            // Get all mapped column names from this template
+            // We only care about the values that are mapped (not null/empty)
+            const mappedColumns = [];
+            
+            REQUIRED_FIELDS.forEach(field => {
+                const colValue = template[field.id]; // e.g. template['item_name_col']
+                if (colValue && colValue.trim() !== '') {
+                    mappedColumns.push(colValue.trim().toLowerCase());
+                }
+            });
+
+            // Check if ALL mapped columns of this template exist in the file headers
+            // We use 'every' to ensure strict subset compliance. 
+            // The file can have MORE headers, but it MUST have ALL headers defined in the template.
+            const isMatch = mappedColumns.every(col => fileHeadersLower.includes(col));
+
+            if (isMatch && mappedColumns.length > 0) {
+                // Found a match!
+                // We could optimize to find the "best" match (most mapped columns), but first valid match is usually good enough for this context.
+                // Let's count how many columns matched to break ties if we wanted to be fancy, but simple iteration is fine.
+                bestMatch = template;
+                break; 
+            }
+        }
+
+        if (bestMatch) {
+            res.json({
+                success: true,
+                matchFound: true,
+                template: bestMatch,
+                message: `Matching template found: ${bestMatch.template_name}`
+            });
+        } else {
+            res.json({
+                success: true,
+                matchFound: false,
+                message: 'No matching template structure found.'
+            });
+        }
+
+    } catch (error) {
+        console.error('Error in find-matching-template:', error);
+        res.status(500).json({ success: false, error: 'Server error analyzing templates.' });
+    }
+});
+
 // --- NEW ROUTE: Validate Date Formats ---
 router.post('/validate-date-formats', requireAuth, async (req, res) => {
     try {

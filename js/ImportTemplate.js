@@ -31,6 +31,7 @@ const DATE_FIELDS = [
 
 let globalHeaders = [];
 let sampleValues = {};
+let columnMetadata = {}; // Store metadata from backend
 let finalTemplateData = {}; // To hold template data after initial check but before final save
 let dateColumnsToValidate = []; // To hold the list of date columns that were mapped by the user
 let isEditing = false; // Flag to track if we are in edit mode
@@ -323,13 +324,15 @@ async function handleFileExtraction() {
         if (response.ok && result.success) {
             globalHeaders = result.headers;
             sampleValues = result.sample_values || {}; // Store sample values globally
+            columnMetadata = result.column_metadata || {}; // Store metadata
             
             updateDropdowns(globalHeaders);
             showMessage('Success', 'Headers extracted and dropdowns updated!', 'success');
             
-            // Update template name preview only if creating new
+            // Check for smart template match ONLY if we are NOT already editing an existing template
             if (!isEditing) {
-                updateTemplateNamePreview(); 
+                updateTemplateNamePreview();
+                checkForSmartTemplateMatch(result.headers);
             }
         } else {
             showMessage('Error', result.error || 'Failed to extract headers.', 'error');
@@ -341,6 +344,69 @@ async function handleFileExtraction() {
         extractButton.disabled = false;
         extractButton.textContent = 'Extract Headers';
     }
+}
+
+// --- Smart Template Detection Logic ---
+
+async function checkForSmartTemplateMatch(headers) {
+    try {
+        const response = await fetch('/api/template/find-matching-template', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ headers })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success && result.matchFound) {
+            // Show Modal
+            const modal = document.getElementById('smartTemplateModal');
+            const nameDisplay = document.getElementById('detectedTemplateName');
+            const btnAccept = document.getElementById('btnAcceptSmartCopy');
+            const btnDecline = document.getElementById('btnDeclineSmartCopy');
+
+            nameDisplay.textContent = result.template.template_name;
+            modal.classList.remove('hidden');
+
+            // Handle Accept
+            btnAccept.onclick = () => {
+                applySmartTemplate(result.template);
+                modal.classList.add('hidden');
+            };
+
+            // Handle Decline
+            btnDecline.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        }
+    } catch (error) {
+        console.error('Smart match error:', error);
+        // Fail silently - user can still map manually
+    }
+}
+
+function applySmartTemplate(template) {
+    // 1. Auto-fill Dropdowns (Mappings)
+    REQUIRED_FIELDS.forEach(field => {
+        const hiddenInput = document.getElementById(field.id);
+        const searchInput = document.getElementById(`search_${field.id}`);
+        const mappedValue = template[field.id];
+
+        if (hiddenInput && searchInput && mappedValue) {
+            hiddenInput.value = mappedValue;
+            searchInput.value = mappedValue;
+        }
+    });
+
+    // 2. Pre-fill Template Name
+    const nameInput = document.getElementById('template_name');
+    nameInput.value = `${template.template_name} (Copy)`;
+    
+    // 3. Store the matched template data to use its date formats later
+    // We attach it to the window object or a global var to reuse existing logic
+    window.currentTemplate = template; // Used by generateDateFieldInputs to pre-fill formats
+
+    showMessage('Smart Copy', `Settings cloned from '${template.template_name}'. Please review and save.`, 'success');
 }
 
 // Validates that all required fields are mapped (not null/empty)
@@ -464,39 +530,54 @@ function startDateFormatValidation(event) {
 }
 
 function generateDateFieldInputs(fields, containerElement) {
+    let hasAutoDetection = false;
+
     fields.forEach(field => {
-        // If editing, try to pre-fill the format from the existing template data (which is in finalTemplateData or should be passed)
-        // Since finalTemplateData is fresh from form, format fields won't be there yet unless we populated form inputs for them.
-        // We need to fetch the existing format if editing.
-        // Actually, let's assume we populated hidden fields or handle it here.
-        // Ideally, if editing, the user might want to change it.
-        
         let existingFormat = '';
-        if (isEditing && window.currentTemplate) {
-            existingFormat = window.currentTemplate[field.formatId] || '';
+        let isAutoDetected = false;
+
+        // Priority 1: Format from matched template (Edit Mode or Smart Copy)
+        if (window.currentTemplate && window.currentTemplate[field.formatId]) {
+            existingFormat = window.currentTemplate[field.formatId];
+        } 
+        // Priority 2: Auto-detected format from file analysis
+        else if (field.mappedColName && columnMetadata[field.mappedColName] && columnMetadata[field.mappedColName].suggested_mysql_format) {
+            existingFormat = columnMetadata[field.mappedColName].suggested_mysql_format;
+            isAutoDetected = true;
+            hasAutoDetection = true;
         }
 
         const html = `
-            <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-sm">
-                <label class="block text-sm font-medium text-gray-700 mb-1">${field.label} Format</label>
+            <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-sm transition hover:shadow-md">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="block text-sm font-medium text-gray-700">${field.label} Format</label>
+                    ${isAutoDetected ? '<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold border border-green-200"><i class="fas fa-magic mr-1"></i>Auto-detected</span>' : ''}
+                </div>
                 <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                     <div class="flex-grow">
-                        <p class="text-xs text-primary font-semibold mb-1">Sample Value from Row 2 (for format inspection):</p>
-                        <p class="text-sm font-mono p-2 bg-gray-50 border rounded">${field.sampleValue || '— EMPTY/N/A —'}</p>
+                        <p class="text-xs text-primary font-semibold mb-1">Sample Value from Row 2:</p>
+                        <p class="text-sm font-mono p-2 bg-gray-50 border rounded text-gray-600">${field.sampleValue || '— EMPTY/N/A —'}</p>
                     </div>
                     <div class="sm:w-1/2">
-                        <label for="${field.formatId}" class="block text-xs font-medium text-gray-700">MySQL Format String (e.g., %d/%m/%Y):</label>
+                        <label for="${field.formatId}" class="block text-xs font-medium text-gray-700 mb-1">MySQL Format String (e.g., %d/%m/%Y):</label>
                         <input type="text" id="${field.formatId}" name="${field.formatId}" 
                                value="${existingFormat}" placeholder="e.g., %d/%m/%Y" 
-                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-primary focus:border-primary">
+                               class="block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-primary focus:border-primary ${isAutoDetected ? 'bg-green-50 border-green-300' : ''}">
                     </div>
                 </div>
-                <p id="${field.formatId}_error" class="text-xs text-red-500 mt-1 hidden"></p>
-                <p id="${field.formatId}_success" class="text-xs text-green-500 mt-1 hidden font-semibold">Format validated successfully!</p>
+                <p id="${field.formatId}_error" class="text-xs text-red-500 mt-2 hidden flex items-center"><i class="fas fa-exclamation-circle mr-1"></i><span></span></p>
+                <p id="${field.formatId}_success" class="text-xs text-green-600 mt-2 hidden font-semibold flex items-center"><i class="fas fa-check-circle mr-1"></i>Format validated successfully!</p>
             </div>
         `;
         containerElement.insertAdjacentHTML('beforeend', html);
     });
+
+    // If we have auto-detected formats, trigger validation automatically for a seamless UX
+    if (hasAutoDetection) {
+        setTimeout(() => {
+            validateDateFormats();
+        }, 500);
+    }
 }
 
 async function validateDateFormats() {

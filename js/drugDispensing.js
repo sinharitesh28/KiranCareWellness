@@ -9,8 +9,6 @@ class MedicineDispensing {
         this.currentFacingMode = 'environment';
         this.codeReader = null;
         this.qrCodeObj = null; // Store QR code instance
-        this.telegramQr = null; // Store Telegram QR instance
-        this.botUsername = null; // Store Bot Username
 
         // NEW: Edit Mode State
         this.isEditMode = false;
@@ -64,7 +62,6 @@ class MedicineDispensing {
         this.initBarcodeScanner();
         this.initZXing();
         this.handlePaymentMethodSelection();
-        this.fetchBotInfo();
     }
 
     initZXing() {
@@ -120,8 +117,6 @@ class MedicineDispensing {
         document.getElementById('customerMobile').addEventListener('blur', (e) => this.handleCustomerMobileBlur(e));
         document.getElementById('customerName').addEventListener('input', (e) => this.handleCustomerNameInput(e));
         document.getElementById('customerEmail').addEventListener('input', (e) => this.handleCustomerEmailInput(e));
-        document.getElementById('connectTelegramBtn').addEventListener('click', () => this.openTelegramModal());
-        document.getElementById('closeTelegramModal').addEventListener('click', () => this.closeTelegramModal());
         // Search events
         const searchInput = document.getElementById('medicineSearch');
         let searchTimeout;
@@ -209,28 +204,9 @@ class MedicineDispensing {
                         }
                         this.currentCustomer = response.customer;
 
-                        const telegramBtn = document.getElementById('connectTelegramBtn');
-                        telegramBtn.classList.remove('hidden');
-
-                        // Check if already linked
-                        if (this.currentCustomer.telegram_chat_id) {
-                            telegramBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-                            telegramBtn.classList.add('bg-green-500', 'hover:bg-green-600');
-                            telegramBtn.innerHTML = '<i class="fas fa-check-circle text-xl mr-2"></i> Linked';
-                            telegramBtn.disabled = true;
-                            telegramBtn.title = "Customer already linked to Telegram";
-                        } else {
-                            telegramBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
-                            telegramBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
-                            telegramBtn.innerHTML = '<i class="fab fa-telegram-plane text-xl"></i>';
-                            telegramBtn.disabled = false;
-                            telegramBtn.title = "Connect Telegram Bot";
-                        }
-
                         this.showMessage('Customer found!', 'success');
                     } else {
                         this.currentCustomer = null;
-                        document.getElementById('connectTelegramBtn').classList.add('hidden');
                         // Clear email field for new customers
                         document.getElementById('customerEmail').value = '';
                         this.showMessage('New customer. You can enter details if needed.', 'info');
@@ -290,72 +266,6 @@ class MedicineDispensing {
         } else {
             qrContainer.classList.add('hidden');
         }
-    }
-
-    openTelegramModal() {
-        const mobile = document.getElementById('customerMobile').value;
-        const name = document.getElementById('customerName').value;
-        const email = document.getElementById('customerEmail').value;
-
-        if (!mobile || !name) {
-            this.showMessage('Please enter Name and Mobile Number first.', 'warning');
-            return;
-        }
-
-        // We need to ensure the customer is saved or fetched to get ID
-        // If we already have currentCustomer with ID, use it.
-        // Else, try to save.
-
-        const processModal = async (customerId) => {
-            const botName = 'KiranCareBot'; // Should be dynamic
-            const link = `https://t.me/${botName}?start=CUST_${customerId}`;
-
-            const qrContainer = document.getElementById('telegramQrCode');
-            qrContainer.innerHTML = '';
-
-            try {
-                // Use QRCode library (loaded in html)
-                new QRCode(qrContainer, {
-                    text: link,
-                    width: 200,
-                    height: 200,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.H
-                });
-
-                document.getElementById('botUsernameDisplay').textContent = `@${botName}`;
-                document.getElementById('telegramModal').classList.remove('hidden');
-            } catch (e) {
-                console.error('QR Gen Error:', e);
-                this.showMessage('Failed to generate QR code.', 'error');
-            }
-        };
-
-        if (this.currentCustomer && this.currentCustomer.id) {
-            processModal(this.currentCustomer.id);
-        } else {
-            // Try to save quickly
-            this.showLoading('Saving profile to generate link...');
-            this.apiCall('/api/dispense/save-customer', 'POST', { mobile_no: mobile, name: name, email: email })
-                .then(res => {
-                    if (res.success && res.customerId) {
-                        this.currentCustomer = { id: res.customerId, mobile_no: mobile, name: name, email: email };
-                        processModal(res.customerId);
-                    } else {
-                        this.showMessage('Could not save customer profile.', 'error');
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    this.showMessage('Error saving profile.', 'error');
-                })
-                .finally(() => this.hideLoading());
-        }
-    }
-
-    closeTelegramModal() {
-        document.getElementById('telegramModal').classList.add('hidden');
     }
 
     handleSearchInput(event) {
@@ -670,19 +580,23 @@ addTableRow(item) {
     const row = document.createElement('tr');
     row.className = 'bg-white border-b hover:bg-gray-50 transition duration-150';
 
-    // Initialize dosage_days if not set
-    if (!item.dosage_days) item.dosage_days = 1;
-
     if (item.dose_dispensing) {
         row.classList.add('dose-item-row');
         const title = `Dose MRP: ₹${item.mrp.toFixed(2)} | Dose Rate: ₹${item.rate.toFixed(2)}`;
         row.innerHTML = `
                 <td class="py-3 px-3 font-medium text-gray-900 whitespace-nowrap">
-                    <div class="flex items-center">
-                        <span class="medicine-name-span cursor-help" title="${title}" data-title="${title}">
-                            ${item.item_name}
-                        </span>
-                        <span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">Dose</span>
+                    <div class="flex flex-col">
+                        <div class="flex items-center">
+                            <span class="medicine-name-span cursor-help" title="${title}">
+                                ${item.item_name}
+                            </span>
+                            <i class="fas fa-info-circle text-blue-500 ml-2 cursor-pointer toggle-details" data-id="${item.id}" title="Click to view details"></i>
+                            <span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">Dose</span>
+                        </div>
+                        <div id="details-${item.id}" class="hidden mt-1 text-xs text-gray-600 bg-gray-50 p-1 rounded border border-gray-200 select-none">
+                            <span class="font-semibold text-gray-800">MRP:</span> ₹${item.mrp.toFixed(2)} | 
+                            <span class="font-semibold text-gray-800">Rate:</span> ₹${item.rate.toFixed(2)}
+                        </div>
                     </div>
                     ${item.item_description ? `<div class="text-xs text-gray-500">${item.item_description}</div>` : ''}
                 </td>
@@ -707,10 +621,6 @@ addTableRow(item) {
                     ₹${item.total_price.toFixed(2)}
                 </td>
                 <td class="py-3 px-3 text-center">
-                    <input type="text" class="w-24 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
-                           data-id="${item.id}" placeholder="09, 21" title="Enter times (HH or HH:MM) separated by comma. e.g. 09, 14, 20. Suggest adding between 08 to 22.">
-                </td>
-                <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -720,12 +630,22 @@ addTableRow(item) {
         const title = `MRP: ₹${item.mrp.toFixed(2)} | Rate: ₹${item.rate.toFixed(2)}`;
         row.innerHTML = `
                 <td class="py-3 px-3 font-medium text-gray-900 whitespace-nowrap">
-                    ${item.is_manual ?
-                `<input type="text" value="${item.item_name}" 
+                    <div class="flex flex-col">
+                        <div class="flex items-center">
+                            ${item.is_manual ?
+                        `<input type="text" value="${item.item_name}" 
                                class="w-full p-1 border border-gray-300 rounded text-sm focus:ring-primary focus:border-primary item-name-input"
                                data-id="${item.id}" placeholder="Enter item name">` :
-                `<span class="medicine-name-span cursor-help" title="${title}" data-title="${title}">${item.item_name}</span>`
-            }
+                        `<span class="medicine-name-span cursor-help" title="${title}">${item.item_name}</span>`
+                    }
+                            ${!item.is_manual ? `<i class="fas fa-info-circle text-blue-500 ml-2 cursor-pointer toggle-details" data-id="${item.id}" title="Click to view details"></i>` : ''}
+                        </div>
+                        ${!item.is_manual ? `
+                        <div id="details-${item.id}" class="hidden mt-1 text-xs text-gray-600 bg-gray-50 p-1 rounded border border-gray-200 select-none">
+                            <span class="font-semibold text-gray-800">MRP:</span> ₹${item.mrp.toFixed(2)} | 
+                            <span class="font-semibold text-gray-800">Rate:</span> ₹${item.rate.toFixed(2)}
+                        </div>` : ''}
+                    </div>
                     ${item.item_description ? `<div class="text-xs text-gray-500">${item.item_description}</div>` : ''}
                 </td>
                 <td class="py-3 px-3 text-right">
@@ -749,10 +669,6 @@ addTableRow(item) {
                     ₹${item.total_price.toFixed(2)}
                 </td>
                 <td class="py-3 px-3 text-center">
-                    <input type="text" class="w-24 text-center border rounded p-1 text-xs focus:ring-primary focus:border-primary dosage-schedule"
-                           data-id="${item.id}" placeholder="09, 21" title="Enter times (HH or HH:MM) separated by comma. e.g. 09, 14, 20. Suggest adding between 08 to 22.">
-                </td>
-                <td class="py-3 px-3 text-center">
                     <button class="text-red-500 hover:text-red-700 remove-item" data-id="${item.id}" title="Remove item">
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -762,16 +678,24 @@ addTableRow(item) {
 
     tbody.appendChild(row);
 
-    // Add long-press support for mobile
-    this.addLongPressListener(row.querySelector('.medicine-name-span'));
-
     // Add event listeners
+    // Toggle details listener
+    const toggleIcon = row.querySelector('.toggle-details');
+    if (toggleIcon) {
+        toggleIcon.addEventListener('click', (e) => {
+            const id = e.target.getAttribute('data-id');
+            const detailsDiv = document.getElementById(`details-${id}`);
+            if (detailsDiv) {
+                detailsDiv.classList.toggle('hidden');
+            }
+        });
+    }
+
     if (item.is_manual) {
         row.querySelector('.item-name-input').addEventListener('input', (e) => this.updateItemName(e));
     }
 
     row.querySelector('.selling-price').addEventListener('input', (e) => this.updateItemPrice(e));
-    row.querySelector('.dosage-schedule').addEventListener('input', (e) => this.updateItemDosage(e));
 
     if (item.dose_dispensing) {
         row.querySelector('.quantity-decrease').addEventListener('click', (e) => this.decreaseQuantity(e));
@@ -790,35 +714,6 @@ addTableRow(item) {
     }
 
     row.querySelector('.remove-item').addEventListener('click', (e) => this.removeItem(e));
-}
-
-addLongPressListener(element) {
-    if (!element) return;
-
-    let pressTimer;
-
-    const start = (e) => {
-        if (e.type === 'click' && e.button !== 0) return;
-        pressTimer = window.setTimeout(() => {
-            const title = element.getAttribute('data-title');
-            this.showMessage(title, 'info');
-        }, 800);
-    };
-
-    const cancel = (e) => {
-        if (pressTimer !== null) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
-        }
-    };
-
-    element.addEventListener('mousedown', start);
-    element.addEventListener('touchstart', start);
-    element.addEventListener('click', cancel);
-    element.addEventListener('mouseout', cancel);
-    element.addEventListener('touchend', cancel);
-    element.addEventListener('touchleave', cancel);
-    element.addEventListener('touchcancel', cancel);
 }
 
 updateItemName(event) {
@@ -858,69 +753,25 @@ updateTableRow(item) {
     }
 }
 
-updateItemPrice(event) {
-    const itemId = event.target.getAttribute('data-id');
-    const newPrice = parseFloat(event.target.value) || 0;
-    const item = this.selectedItems.find(i => i.id == itemId);
+    updateItemPrice(event) {
+        const itemId = event.target.getAttribute('data-id');
+        const newPrice = parseFloat(event.target.value) || 0;
+        const item = this.selectedItems.find(i => i.id == itemId);
 
-    if (item) {
-        item.selling_price = newPrice;
-        if (item.dose_dispensing) {
-            item.dose_unit_price = newPrice;
-            item.total_price = newPrice * item.dose_quantity;
-        } else {
-            item.total_price = newPrice * item.quantity;
+        if (item) {
+            item.selling_price = newPrice;
+            if (item.dose_dispensing) {
+                item.dose_unit_price = newPrice;
+                item.total_price = newPrice * item.dose_quantity;
+            } else {
+                item.total_price = newPrice * item.quantity;
+            }
+            this.updateTableRow(item);
+            this.calculateBillSummary();
         }
-        this.updateTableRow(item);
-        this.calculateBillSummary();
-    }
-}
-
-updateItemDosage(event) {
-    const itemId = event.target.getAttribute('data-id');
-    const schedule = event.target.value.trim();
-    const item = this.selectedItems.find(i => i.id == itemId);
-
-    if (item) {
-        item.dosage_schedule = schedule;
-        this.calculateDosageDays(item);
-    }
-}
-
-calculateDosageDays(item) {
-    // Only calculate for items with dosage schedule
-    if (!item.dosage_schedule) {
-        item.dosage_days = 1;
-        return;
     }
 
-    // Count number of times per day (comma separated)
-    const times = item.dosage_schedule.split(',').filter(t => t.trim().length > 0);
-    const frequencyPerDay = times.length || 1;
-
-    // Total units given
-    const totalUnits = item.dose_dispensing ? item.dose_quantity : item.quantity;
-
-    // Assume 1 unit per dose unless specified (could be an enhancement later)
-    const unitsPerDose = 1;
-
-    // Calculate days: Total / (Frequency * UnitPerDose)
-    const days = totalUnits / (frequencyPerDay * unitsPerDose);
-
-    item.dosage_days = Math.max(1, Math.ceil(days));
-
-    console.log(`Calculated days for ${item.item_name}: ${days} -> ${item.dosage_days} days (Freq: ${frequencyPerDay}, Total: ${totalUnits})`);
-
-    // Optional: Update UI to show calculated days if we add a field for it
-    // For now, maybe update the tooltip of the dosage input
-    const input = document.querySelector(`.dosage-schedule[data-id="${item.id}"]`);
-    if (input) {
-        input.title = `Schedule: ${item.dosage_schedule} | Est. Duration: ${item.dosage_days} Days`;
-    }
-}
-
-updateItemQuantity(event) {
-    const itemId = event.target.getAttribute('data-id');
+    updateItemQuantity(event) {    const itemId = event.target.getAttribute('data-id');
     const newQuantity = parseInt(event.target.value) || 1;
     const item = this.selectedItems.find(i => i.id == itemId);
 
@@ -956,7 +807,6 @@ updateItemQuantity(event) {
                 item.dose_quantity = Math.max(1, newDoseQuantity);
                 item.quantity = item.dose_quantity;
                 item.total_price = item.dose_unit_price * item.dose_quantity;
-                this.calculateDosageDays(item); // Recalculate days
                 this.updateTableRow(item);
                 this.calculateBillSummary();
             }
@@ -981,7 +831,6 @@ decreaseQuantity(event) {
                 item.dose_quantity -= 1;
                 item.quantity = item.dose_quantity;
                 item.total_price = item.dose_unit_price * item.dose_quantity;
-                this.calculateDosageDays(item); // Recalculate days
                 this.updateTableRow(item);
                 this.calculateBillSummary();
             }
@@ -989,7 +838,6 @@ decreaseQuantity(event) {
             if (item.quantity > 1) {
                 item.quantity -= 1;
                 item.total_price = item.selling_price * item.quantity;
-                this.calculateDosageDays(item); // Recalculate days (if applied to regular items)
                 this.updateTableRow(item);
                 this.calculateBillSummary();
             }
@@ -1023,7 +871,6 @@ decreaseQuantity(event) {
                     item.dose_quantity = newDoseQuantity;
                     item.quantity = item.dose_quantity;
                     item.total_price = item.dose_unit_price * item.dose_quantity;
-                    this.calculateDosageDays(item); // Recalculate days
                     this.updateTableRow(item);
                     this.calculateBillSummary();
                 }
@@ -1037,7 +884,6 @@ decreaseQuantity(event) {
         } else {
             item.quantity += 1;
             item.total_price = item.selling_price * item.quantity;
-            this.calculateDosageDays(item); // Recalculate days
             this.updateTableRow(item);
             this.calculateBillSummary();
         }
@@ -1656,60 +1502,8 @@ handleClickOutside(event) {
     }
 }
 
-    async fetchBotInfo() {
-    try {
-        const response = await fetch('/api/customers/bot-info');
-        const data = await response.json();
-        if (data.success) {
-            this.botUsername = data.username;
-        }
-    } catch (error) {
-        console.error('Error fetching bot info:', error);
-    }
-}
-
-openTelegramModal() {
-    if (!this.currentCustomer || !this.currentCustomer.id) {
-        this.showMessage('Please save/select a customer first.', 'warning');
-        return;
-    }
-
-    if (!this.botUsername) {
-        this.showMessage('Bot information not available. Check internet or server.', 'error');
-        return;
-    }
-
-    const modal = document.getElementById('telegramModal');
-    const qrContainer = document.getElementById('telegramQrCode');
-    const usernameDisplay = document.getElementById('botUsernameDisplay');
-
-    modal.classList.remove('hidden');
-    usernameDisplay.textContent = `@${this.botUsername}`;
-
-    // Deep Link: https://t.me/BotName?start=CustomerID
-    const deepLink = `https://t.me/${this.botUsername}?start=${this.currentCustomer.id}`;
-
-    qrContainer.innerHTML = '';
-    this.telegramQr = new QRCode(qrContainer, {
-        text: deepLink,
-        width: 200,
-        height: 200,
-        colorDark: "#0088cc", // Telegram Blue
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.H
-    });
-}
-
-closeTelegramModal() {
-    document.getElementById('telegramModal').classList.add('hidden');
-    if (this.telegramQr) {
-        document.getElementById('telegramQrCode').innerHTML = ''; // clear
-        this.telegramQr = null;
-    }
-}
-
-loadUserInfo() {
-    // Load user info from auth
+    loadUserInfo() {
+        // Load user info from auth
     fetch('/auth/user-data')
         .then(response => response.json())
         .then(data => {
@@ -1873,16 +1667,7 @@ closeReturnModal() {
 
                 // Trigger blur logic to set buttons correctly
                 if (customer.mobile_no) {
-                    const telegramBtn = document.getElementById('connectTelegramBtn');
-                    telegramBtn.classList.remove('hidden');
-                    if (customer.telegram_chat_id) {
-                        telegramBtn.classList.remove('bg-blue-500');
-                        telegramBtn.classList.add('bg-green-500');
-                        telegramBtn.innerHTML = '<i class="fas fa-check-circle text-xl mr-2"></i> Linked';
-                        telegramBtn.disabled = true;
-                    } else {
-                        telegramBtn.classList.add('bg-blue-500');
-                    }
+                    // No telegram logic anymore
                 }
             }
 
@@ -1903,8 +1688,6 @@ closeReturnModal() {
                     dose_stock_id: item.dose_stock_id,
                     dose_quantity: item.dose_quantity,
                     dose_unit_price: parseFloat(item.dose_unit_price),
-                    dosage_schedule: item.dosage_schedule,
-                    dosage_days: item.dosage_days,
                     is_manual: !!item.is_manual
                 };
                 this.selectedItems.push(mappedItem);
@@ -1978,7 +1761,6 @@ newTransaction(confirm = true) {
     saveBtn.classList.remove('bg-orange-600', 'hover:bg-orange-700', 'text-white');
 
     document.getElementById('returnTransaction').classList.remove('hidden');
-    document.getElementById('connectTelegramBtn').classList.add('hidden');
 
     document.querySelector('input[name="paymentMethod"][value="cash"]').click();
 

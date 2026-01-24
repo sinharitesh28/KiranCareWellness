@@ -5,7 +5,6 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const transporter = require('../mailer');
-const { scheduleRemindersForTransaction, sendDigitalBill } = require('../services/telegramService');
 
 const router = express.Router();
 
@@ -218,8 +217,8 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
         for (const item of items) {
             await connection.query(
                 `INSERT INTO transaction_items 
-                (transaction_id, stock_detail_id, item_name, item_description, mrp, selling_price, quantity, total_price, location, is_manual, dose_dispensing, dose_stock_id, dose_quantity, dose_unit_price, dosage_schedule, dosage_days) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (transaction_id, stock_detail_id, item_name, item_description, mrp, selling_price, quantity, total_price, location, is_manual, dose_dispensing, dose_stock_id, dose_quantity, dose_unit_price) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     transactionId,
                     item.stock_detail_id,
@@ -234,9 +233,7 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
                     item.dose_dispensing || false,
                     item.dose_stock_id || null,
                     item.dose_quantity || null,
-                    item.dose_unit_price || null,
-                    item.dosage_schedule || null,
-                    item.dosage_days || 1
+                    item.dose_unit_price || null
                 ]
             );
 
@@ -265,15 +262,6 @@ router.post('/save-transaction', requireAuth, async (req, res) => {
         }
 
         await connection.commit();
-
-        // Trigger background tasks (Telegram Bot)
-        // We don't await these to ensure fast response to client
-        if (transactionId) {
-            scheduleRemindersForTransaction(transactionId).catch(e => console.error('Bg task reminder error:', e));
-            if (customerId) {
-                sendDigitalBill(customerId, transactionId).catch(e => console.error('Bg task bill error:', e));
-            }
-        }
 
         res.json({ success: true, transactionId, billNumber, message: 'Transaction saved successfully' });
 
@@ -468,8 +456,8 @@ router.post('/update-transaction', requireAuth, async (req, res) => {
         for (const item of items) {
             await connection.query(
                 `INSERT INTO transaction_items 
-                (transaction_id, stock_detail_id, item_name, item_description, mrp, selling_price, quantity, total_price, location, is_manual, dose_dispensing, dose_stock_id, dose_quantity, dose_unit_price, dosage_schedule, dosage_days) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (transaction_id, stock_detail_id, item_name, item_description, mrp, selling_price, quantity, total_price, location, is_manual, dose_dispensing, dose_stock_id, dose_quantity, dose_unit_price) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     transactionId,
                     item.stock_detail_id,
@@ -484,9 +472,7 @@ router.post('/update-transaction', requireAuth, async (req, res) => {
                     item.dose_dispensing || false,
                     item.dose_stock_id || null,
                     item.dose_quantity || null,
-                    item.dose_unit_price || null,
-                    item.dosage_schedule || null,
-                    item.dosage_days || 1
+                    item.dose_unit_price || null
                 ]
             );
         }

@@ -51,6 +51,7 @@ const messages = {
     }
 };
 
+/*
 // Cron Job for Reminders
 cron.schedule('* * * * *', async () => {
     if (!bot) return;
@@ -99,7 +100,9 @@ cron.schedule('* * * * *', async () => {
         console.error('Error in reminder cron:', err);
     }
 });
+*/
 
+/*
 // Handle Reminder Callbacks (Defined here or in a handler file? Let's add listener here for legacy/cron features)
 if (bot) {
     bot.action(/rem_(taken|snooze|skip)_(\d+)/, async (ctx) => {
@@ -127,6 +130,7 @@ if (bot) {
         ctx.answerCbQuery();
     });
 }
+*/
 // 5. Send Digital Bill
 async function sendDigitalBill(customerId, transactionId) {
     if (!bot) return;
@@ -165,6 +169,7 @@ async function sendDigitalBill(customerId, transactionId) {
     }
 }
 
+/*
 // 6. Generate Reminders from Transaction (Existing logic reused)
 async function scheduleRemindersForTransaction(transactionId) {
     try {
@@ -242,10 +247,11 @@ async function scheduleRemindersForTransaction(transactionId) {
         console.error('Error generating reminders:', err);
     }
 }
+*/
 
 module.exports = {
     bot,
     launchBot,
     sendDigitalBill,
-    scheduleRemindersForTransaction
+    // scheduleRemindersForTransaction
 };
