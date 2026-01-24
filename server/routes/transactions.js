@@ -76,15 +76,15 @@ router.get('/search-medicines', async (req, res) => {
 
         switch (category) {
             case 'name':
-                sql += 'item_name LIKE ?';
+                sql += 'LOWER(item_name) LIKE LOWER(?)';
                 params.push(`%${query}%`);
                 break;
             case 'description':
-                sql += 'item_desc LIKE ?';
+                sql += 'LOWER(item_desc) LIKE LOWER(?)';
                 params.push(`%${query}%`);
                 break;
             case 'location':
-                sql += 'location LIKE ?';
+                sql += 'LOWER(location) LIKE LOWER(?)';
                 params.push(`%${query}%`);
                 break;
             case 'barcode':
@@ -93,7 +93,7 @@ router.get('/search-medicines', async (req, res) => {
                 break;
             case 'all':
             default:
-                sql += '(item_name LIKE ? OR item_desc LIKE ? OR location LIKE ? OR barcode = ?)';
+                sql += '(LOWER(item_name) LIKE LOWER(?) OR LOWER(item_desc) LIKE LOWER(?) OR LOWER(location) LIKE LOWER(?) OR barcode = ?)';
                 params.push(`%${query}%`, `%${query}%`, `%${query}%`, query);
                 break;
         }

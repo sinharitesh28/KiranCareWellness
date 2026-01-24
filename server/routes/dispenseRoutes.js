@@ -70,15 +70,15 @@ router.get('/search-medicines', requireAuth, async (req, res) => {
 
     switch (category) {
         case 'name':
-            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE item_name LIKE ? AND quantity > 0`;
+            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE LOWER(item_name) LIKE LOWER(?) AND quantity > 0`;
             searchParams = [`%${query}%`];
             break;
         case 'description':
-            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE item_desc LIKE ? AND quantity > 0`;
+            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE LOWER(item_desc) LIKE LOWER(?) AND quantity > 0`;
             searchParams = [`%${query}%`];
             break;
         case 'location':
-            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE location LIKE ? AND quantity > 0`;
+            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE LOWER(location) LIKE LOWER(?) AND quantity > 0`;
             searchParams = [`%${query}%`];
             break;
         case 'barcode':
@@ -90,7 +90,7 @@ router.get('/search-medicines', requireAuth, async (req, res) => {
             searchParams = [query, query];
             break;
         default:
-            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE (item_name LIKE ? OR item_desc LIKE ? OR location LIKE ? OR barcode = ?) AND quantity > 0`;
+            searchSql = `SELECT id, item_name, item_desc, mrp, COALESCE(rate, mrp) as rate, quantity, location, barcode, batch_number, expiry_date, manufacturer FROM import_stock_detail WHERE (LOWER(item_name) LIKE LOWER(?) OR LOWER(item_desc) LIKE LOWER(?) OR LOWER(location) LIKE LOWER(?) OR barcode = ?) AND quantity > 0`;
             searchParams = [`%${query}%`, `%${query}%`, `%${query}%`, query];
     }
 
@@ -630,15 +630,15 @@ router.get('/search-medicines-with-dose', requireAuth, async (req, res) => {
 
     switch (category) {
         case 'name':
-            whereClauseNormal = 'd.item_name LIKE ?';
+            whereClauseNormal = 'LOWER(d.item_name) LIKE LOWER(?)';
             sqlParams = [searchTerm, searchTerm];
             break;
         case 'description':
-            whereClauseNormal = 'd.item_desc LIKE ?';
+            whereClauseNormal = 'LOWER(d.item_desc) LIKE LOWER(?)';
             sqlParams = [searchTerm, searchTerm];
             break;
         case 'location':
-            whereClauseNormal = 'd.location LIKE ?';
+            whereClauseNormal = 'LOWER(d.location) LIKE LOWER(?)';
             sqlParams = [searchTerm, searchTerm];
             break;
         case 'barcode':
@@ -646,7 +646,7 @@ router.get('/search-medicines-with-dose', requireAuth, async (req, res) => {
             sqlParams = [query, query];
             break;
         default:
-            whereClauseNormal = '(d.item_name LIKE ? OR d.item_desc LIKE ? OR d.location LIKE ? OR d.barcode = ?)';
+            whereClauseNormal = '(LOWER(d.item_name) LIKE LOWER(?) OR LOWER(d.item_desc) LIKE LOWER(?) OR LOWER(d.location) LIKE LOWER(?) OR d.barcode = ?)';
             sqlParams = [searchTerm, searchTerm, searchTerm, query, searchTerm, searchTerm, searchTerm, query];
     }
 
