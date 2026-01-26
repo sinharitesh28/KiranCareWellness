@@ -184,8 +184,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 span.textContent = token;
             } else {
                 span.textContent = token;
-                span.className = "token py-0.5 px-0.5 rounded transition cursor-pointer hover:bg-yellow-100";
-                span.onclick = () => handleTokenClick(span, token, source, idx, tokens);
+                span.className = "token";
+                span.onclick = (e) => {
+                    e.stopPropagation();
+                    handleTokenClick(span, token, source, idx, tokens);
+                };
             }
             container.appendChild(span);
         });
@@ -215,10 +218,11 @@ document.addEventListener('DOMContentLoaded', () => {
         let regexPattern = '';
         if (anchor) {
             // Pattern: Anchor followed by whitespace and then capture non-whitespace
-            regexPattern = `${escapedAnchor}\s*([^\\s]+)`;
+            // Use double backslashes for string literal regex
+            regexPattern = `${escapedAnchor}\\\\s*([^\\\\s]+)`;
         } else {
             // Fallback: If it looks like a date
-            if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(value)) regexPattern = "(\\d{2}[-/]\\d{2}[-/]\\d{4})";
+            if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(value)) regexPattern = "(\\\\d{2}[-/]\\\\d{2}[-/]\\\\d{4})";
             else regexPattern = `(${escapedValue})`;
         }
         
@@ -233,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resetSelectionButtons();
         
         // Android UX: Flash success
-        this.showToast(`Selected ${currentSelectionMode}: ${value}`);
+        window.showToast(`Selected ${currentSelectionMode}: ${value}`);
     }
 
     function toggleSelectionMode(mode, btn) {
