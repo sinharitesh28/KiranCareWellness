@@ -103,13 +103,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const el = document.createElement('div');
                     el.className = 'p-4 bg-white border border-gray-200 rounded-xl cursor-pointer hover:bg-green-50 hover:border-primary/30 transition flex justify-between items-center shadow-sm mb-2';
                     el.onclick = () => selectCandidate(email.id);
-                    el.innerHTML = '
+                    el.innerHTML = `
                         <div class="truncate pr-4">
-                            <p class="font-bold text-gray-800 text-sm truncate">' + (email.subject || '(No Subject)') + '</p>
-                            <p class="text-[10px] text-gray-500 uppercase tracking-tight mt-1">' + email.sender.split('<')[0] + ' &bull; ' + dayjs(email.date).format('DD MMM') + '</p>
+                            <p class="font-bold text-gray-800 text-sm truncate">${email.subject || '(No Subject)'}</p>
+                            <p class="text-[10px] text-gray-500 uppercase tracking-tight mt-1">${email.sender.split('<')[0]} &bull; ${dayjs(email.date).format('DD MMM')}</p>
                         </div>
                         <i class="fas fa-chevron-right text-gray-300 text-xs"></i>
-                    ';
+                    `;
                     candidatesList.appendChild(el);
                 });
             } else {
@@ -314,16 +314,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             tr.className = `border-b border-gray-100 ${bg}`;
-            tr.innerHTML = '
+            tr.innerHTML = `
                 <td class="px-4 py-4">
                     <input type="text" list="fileHeadersList" 
                            class="map-input w-full rounded-xl border-gray-200 shadow-sm focus:border-primary focus:ring-primary p-2.5 text-sm"
-                           value="' + (row.suggestedHeader || '') + '"
-                           data-system-column="' + row.systemColumn + '">
+                           value="${row.suggestedHeader || ''}"
+                           data-system-column="${row.systemColumn}">
                 </td>
-                <td class="px-4 py-4"><span class="font-bold text-gray-700 text-sm">' + row.systemLabel + '</span></td>
-                <td class="px-4 py-4 text-center"><i class="fas ' + icon + '"></i></td>
-            ';
+                <td class="px-4 py-4"><span class="font-bold text-gray-700 text-sm">${row.systemLabel}</span></td>
+                <td class="px-4 py-4 text-center"><i class="fas ${icon}"></i></td>
+            `;
             tbody.appendChild(tr);
         });
     }
