@@ -10,12 +10,13 @@ require('dotenv').config();
 
 const config = {
     imap: {
-        user: process.env.MAIL_USER,
-        password: process.env.MAIL_PASS,
-        host: 'imap.gmail.com',
+        user: process.env.IMAP_USER || process.env.MAIL_USER,
+        password: process.env.IMAP_PASS || process.env.MAIL_PASS,
+        host: process.env.IMAP_HOST || 'imap.gmail.com',
         port: 993,
         tls: true,
         authTimeout: 10000,
+        connTimeout: 15000, // Added connection timeout
         tlsOptions: { rejectUnauthorized: false }
     }
 };

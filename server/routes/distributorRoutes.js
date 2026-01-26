@@ -12,17 +12,8 @@ const gmailService = require('../services/gmailService');
 
 require('dotenv').config();
 
-const config = {
-    imap: {
-        user: process.env.MAIL_USER,
-        password: process.env.MAIL_PASS,
-        host: 'imap.gmail.com',
-        port: 993,
-        tls: true,
-        authTimeout: 10000,
-        tlsOptions: { rejectUnauthorized: false }
-    }
-};
+// Use centralized IMAP config from gmailService
+const gmailConfig = require('../services/gmailService').config;
 
 // ... (Helper functions levenshtein, getSimilarity, getFilename, extractSubjectKeyword remain the same)
 // Helper: Levenshtein Distance for Fuzzy Matching
@@ -140,14 +131,8 @@ router.post('/fetch-email-metadata', requireAuth, async (req, res) => {
     }
 
     // Default: Recent 3 days
-    if (searchCriteria.length === 0) {
-        const date = new Date();
-        date.setDate(date.getDate() - 3);
-        searchCriteria = [['SINCE', date]]; 
-    }
-
     try {
-        const connection = await imaps.connect(config);
+        const connection = await imaps.connect(gmailConfig);
         await connection.openBox('INBOX');
 
         const fetchOptions = { bodies: ['HEADER', 'TEXT'], struct: true };
@@ -235,7 +220,7 @@ router.post('/analyze-file', requireAuth, async (req, res) => {
     if (!uid || !fileName) return res.status(400).json({ success: false, error: 'UID required' });
 
     try {
-        const connection = await imaps.connect(config);
+        const connection = await imaps.connect(gmailConfig);
         await connection.openBox('INBOX');
         const messages = await connection.search([['UID', uid]], { bodies: ['HEADER'], struct: true });
         if (messages.length === 0) throw new Error('Message not found');
