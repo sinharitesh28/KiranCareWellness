@@ -20,6 +20,6 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--set-env-vars'
-      - 'DB_HOST=gateway01.ap-southeast-1.prod.aws.tidbcloud.com,DB_PORT=4000,DB_USER=R1i3CzLULNJ54MZ.root,DB_PASSWORD=t9Vf3YcwcP0sSM4n,DB_NAME=test,TELEGRAM_BOT_TOKEN=8389761461:AAF-9xCgVAZej0Wqo57W9tLDVuIVhHt2EkM,TELEGRAM_BOT_USERNAME=Kiran_Care_Wellness_bot'
+      - 'DB_HOST=gateway01.ap-southeast-1.prod.aws.tidbcloud.com,DB_PORT=4000,DB_USER=R1i3CzLULNJ54MZ.root,DB_PASSWORD=t9Vf3YcwcP0sSM4n,DB_NAME=test,TELEGRAM_BOT_TOKEN=8389761461:AAF-9xCgVAZej0Wqo57W9tLDVuIVhHt2EkM,TELEGRAM_BOT_USERNAME=Kiran_Care_Wellness_bot,MAIL_USER=kirancarewellness@gmail.com,MAIL_PASS=oaqx nway ybbk nwxo'
 images:
   - 'gcr.io/$PROJECT_ID/kiran-service'

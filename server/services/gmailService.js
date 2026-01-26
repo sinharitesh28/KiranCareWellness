@@ -74,6 +74,9 @@ function getFilename(part) {
  */
 async function fetchStockEmails(filters = {}) {
     try {
+        if (!config.imap.user || !config.imap.password) {
+            return { success: false, error: 'Email credentials (MAIL_USER/MAIL_PASS) are not configured in the environment.' };
+        }
         const connection = await imaps.connect(config);
         await connection.openBox('INBOX');
 
