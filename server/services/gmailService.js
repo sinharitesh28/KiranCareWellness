@@ -293,5 +293,6 @@ async function downloadAttachment(uid, filename) {
 
 module.exports = {
     fetchStockEmails,
-    downloadAttachment
+    downloadAttachment,
+    config // Export the config object
 };
