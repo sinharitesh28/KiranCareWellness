@@ -18,11 +18,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             for (let i = 0; i < maxRetries; i++) {
                 try {
-                    // Fetch is implicitly authenticated via the session cookie set by the server
                     response = await fetch(API_URL);
-                    if (response.ok) break; // Break if successful
+                    if (response.status === 401) {
+                        window.location.href = '/';
+                        return;
+                    }
+                    if (response.ok) break; 
 
-                    // Wait before retrying (1s, 2s, 4s)
                     await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
                 } catch (err) {
                     console.error('Fetch attempt failed:', err.message);

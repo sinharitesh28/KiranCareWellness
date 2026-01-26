@@ -59,51 +59,19 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'logIn.html'));
 });
 
-// serve static files from project root
-app.use(express.static(path.join(__dirname, '..'), { maxAge: '0' }));
+// Serve core public assets (logos, login css/js)
+app.use('/img', express.static(path.join(__dirname, '..', 'img')));
+app.use('/css/logIn.css', express.static(path.join(__dirname, '..', 'css', 'logIn.css')));
+app.use('/js/logIn.js', express.static(path.join(__dirname, '..', 'js', 'logIn.js')));
 
 // 👇 APPLY AUTH MIDDLEWARE TO ALL REMAINING ROUTES
-const protectedRouter = express.Router();
-protectedRouter.use(requireAuth);
+app.use(requireAuth);
 
-// Protected routes
-protectedRouter.get('/index.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'index.html'));
-});
+// serve all remaining static files from project root (PROTECTED)
+app.use(express.static(path.join(__dirname, '..'), { maxAge: '0' }));
 
-protectedRouter.get('/ImportTemplate.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'html', 'ImportTemplate.html'));
-});
-
-protectedRouter.get('/importStock.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'html', 'importStock.html'));
-});
-
-// NEW: Barcode printing page route
-protectedRouter.get('/barcode-printing.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'html', 'barcodePrinting.html'));
-});
-
-protectedRouter.get('/drugDispensing.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'html', 'drugDispensing.html'));
-});
-
-protectedRouter.get('/UserManagement.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'html', 'UserManagement.html'));
-});
-
-protectedRouter.get('/TelegramDashboard.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'html', 'TelegramDashboard.html'));
-});
-
-// NEW: Distributor Config Page
-protectedRouter.get('/distributor-config.html', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'html', 'distributorConfig.html'));
-});
-
-
-// Use the protected router
-app.use(protectedRouter);
+// API routes are already handled after middleware above if they are defined on app directly
+// or we can mount them on app since app.use(requireAuth) was called.
 
 // Use the API routes
 app.use('/api/template', templateRoutes);

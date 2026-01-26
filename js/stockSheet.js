@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoading(true);
         try {
             const response = await fetch('/api/stock/stock-sheet');
+            if (response.status === 401) {
+                window.location.href = '/';
+                return;
+            }
             const data = await response.json();
 
             if (data.success) {

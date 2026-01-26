@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchCustomers() {
         try {
             const response = await fetch('/api/customers');
+            if (response.status === 401) {
+                window.location.href = '/';
+                return;
+            }
             const data = await response.json();
 
             if (data.success) {

@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadSalesReports(params) {
         try {
             const res = await fetch(`/api/analytics/sales?${params}`);
+            if (res.status === 401) { window.location.href = '/'; return; }
             const data = await res.json();
 
             if (data.success) {
@@ -99,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadStockStatus() {
         try {
             const res = await fetch(`/api/analytics/stock-status`);
+            if (res.status === 401) { window.location.href = '/'; return; }
             const data = await res.json();
 
             if (data.success) {
@@ -174,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadABCAnalysis(params) {
         try {
             const res = await fetch(`/api/analytics/abc-analysis?${params}`);
+            if (res.status === 401) { window.location.href = '/'; return; }
             const data = await res.json();
 
             if (data.success) {

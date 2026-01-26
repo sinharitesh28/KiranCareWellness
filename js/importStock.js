@@ -74,6 +74,7 @@ function parseDate(dateString, format) {
 async function fetchTemplates() {
     try {
         const response = await fetch('/api/template/get-templates');
+        if (response.status === 401) { window.location.href = '/'; return; }
         const result = await response.json();
         if (result.success) {
             templates = result.templates;
@@ -84,6 +85,7 @@ async function fetchTemplates() {
 async function fetchDistributorConfigs() {
     try {
         const response = await fetch('/api/stock/distributor-config');
+        if (response.status === 401) { window.location.href = '/'; return; }
         const result = await response.json();
         if (result.success) {
             distributorConfigs = result.configs;
@@ -99,6 +101,7 @@ async function fetchLastLocations(itemNames) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ itemNames })
         });
+        if (response.status === 401) { window.location.href = '/'; return {}; }
         const result = await response.json();
         return result.success ? result.locations : {};
     } catch (error) { return {}; }
@@ -124,6 +127,7 @@ async function importStocks() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
+        if (response.status === 401) { window.location.href = '/'; return; }
         const result = await response.json();
         showLoading(false);
 
@@ -385,6 +389,7 @@ async function searchEmails() {
 
     try {
         const response = await fetch(`/api/stock/gmail/scan?${params.toString()}`);
+        if (response.status === 401) { window.location.href = '/'; return; }
         const result = await response.json();
         
         if (result.success && result.emails.length > 0) {
@@ -476,6 +481,7 @@ async function processGmailAttachment(uid, filename, configId) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ uid, filename })
         });
+        if (response.status === 401) { window.location.href = '/'; return; }
         const result = await response.json();
         showLoading(false);
 

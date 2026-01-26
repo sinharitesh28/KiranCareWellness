@@ -503,7 +503,12 @@ class MedicineDispensing {
         const o = { method: m, headers: { 'Content-Type': 'application/json' } };
         if(m==='GET' && d) u += '?' + new URLSearchParams(d).toString();
         else if(d) o.body = JSON.stringify(d);
-        const r = await fetch(u, o); return await r.json();
+        const r = await fetch(u, o);
+        if (r.status === 401) {
+            window.location.href = '/';
+            return { success: false, error: 'Unauthorized' };
+        }
+        return await r.json();
     }
 }
 
