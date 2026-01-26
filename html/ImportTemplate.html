@@ -3,241 +3,270 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KiranCareWellness - Import Template Creator</title>
-    <link rel="icon" type="image/png" href="../img/KiranCareWellnessLogo.png">
-    
-    <!-- Load Tailwind CSS for rapid responsive styling -->
+    <title>Import Template Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1"></script>
-    <!-- Custom Tailwind Configuration (MUST be in a script tag) -->
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        'primary': '#00712D',      /* Dark Green */
-                        'secondary': '#D5ED9F',    /* Light Pastel Green/Yellow */
-                        'tertiary': '#FFFBE6',     /* Very Light Cream/Yellow */
-                        'quarterly': '#FF9100',    /* Bright Orange (Accent) */
+                        'primary': '#00712D',
+                        'secondary': '#D5ED9F',
+                        'tertiary': '#FFFBE6',
+                        'quarterly': '#FF9100',
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
-                    },
+                    }
                 }
             }
         }
     </script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="/css/ImportTemplate.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/index.css">
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <style>
+        .confidence-high { background-color: #f0fdf4; border-left-color: #22c55e; }
+        .confidence-moderate { background-color: #fefce8; border-left-color: #eab308; }
+        .confidence-poor { background-color: #fff1f2; border-left-color: #ef4444; }
+        .step-card {
+            background-color: white;
+            border-radius: 1rem; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
+            transition: all 0.3s ease-in-out;
+        }
+        .tab-active { border-bottom: 2px solid #00712D; color: #00712D; }
+        .tab-inactive { color: #6B7280; }
+    </style>
 </head>
-<body class="bg-tertiary font-sans min-h-screen p-4 sm:p-8 flex justify-center items-start">
+<body class="bg-tertiary min-h-screen p-4 sm:p-8 font-sans">
 
-    <div class="w-full max-w-4xl space-y-8">
-        
+    <div class="max-w-7xl mx-auto">
         <!-- Header -->
-        <header class="text-center mb-10">
-            <div class="flex items-center justify-center mb-4 relative">
-                <a href="/index.html" class="absolute left-0 text-gray-500 hover:text-primary transition">
+        <header class="mb-6 flex items-center justify-between p-4 bg-white rounded-xl shadow-md">
+            <div class="flex items-center">
+                 <a href="/index.html" class="mr-4 text-gray-500 hover:text-primary transition-colors">
                     <i class="fas fa-arrow-left text-2xl"></i>
                 </a>
-                <div class="flex items-center">
-                    <img src="/img/KiranCareWellnessLogo.svg" onerror="this.onerror=null; this.src='https://placehold.co/40x40/00712D/ffffff?text=KR';" alt="Logo" class="h-10 w-auto mr-4">
-                    <h1 class="text-3xl sm:text-4xl font-extrabold text-primary">Import Template Creator</h1>
-                </div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-primary">
+                    Import Configuration
+                </h1>
             </div>
-            <p class="text-lg text-gray-600">Map your Excel/CSV columns to database fields for easy stock import.</p>
+             <img src="/img/KiranCareWellnessLogo.svg" alt="Logo" class="h-12 w-auto rounded-md">
         </header>
 
-        <!-- Main Form Container -->
-        <form id="templateForm" class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl border border-primary/10 relative">
-            <input type="hidden" id="editing_template_id" name="editing_template_id" value="">
-            <div class="absolute top-4 right-4 hidden" id="editingBadge">
-                <span class="bg-quarterly text-white text-xs font-bold px-2 py-1 rounded shadow-sm">EDITING MODE</span>
-            </div>
+        <!-- Tabs -->
+        <div class="mb-6 border-b border-gray-200">
+            <nav class="-mb-px flex space-x-8">
+                <button id="tabNew" class="tab-active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg flex items-center">
+                    <i class="fas fa-magic mr-2"></i> Smart Configuration
+                </button>
+                <button id="tabManage" class="tab-inactive whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-lg flex items-center hover:text-gray-700 hover:border-gray-300">
+                    <i class="fas fa-list mr-2"></i> Manage Existing
+                </button>
+            </nav>
+        </div>
 
-            <!-- Step 1: File Upload & Header Extraction -->
-            <div class="mb-8">
-                <h2 class="text-xl font-bold text-primary mb-4">Step 1: Upload File & Map Columns</h2>
-                <div class="flex flex-col sm:flex-row sm:items-end space-y-4 sm:space-y-0 sm:space-x-4 mb-4">
-                    <div class="flex-grow">
-                        <label for="template_file" class="block text-sm font-medium text-gray-700">Template File (Excel or CSV)</label>
-                        <input type="file" id="template_file" name="template_file" accept=".xlsx,.xls,.csv" required 
-                               class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-secondary file:text-primary hover:file:bg-secondary/80">
+        <!-- VIEW 1: SMART CONFIGURATION (The Logic from DistributorConfig.html) -->
+        <div id="viewNewConfig" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Left Column: Steps -->
+            <aside class="lg:col-span-1">
+                <div class="step-card p-6 sticky top-8">
+                    <h2 class="text-xl font-bold text-gray-700 mb-6">Setup Steps</h2>
+                    <ul class="space-y-5">
+                        <li id="step1Indicator" class="flex items-center opacity-100">
+                            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white font-bold mr-4">1</span>
+                            <span class="font-semibold text-gray-800">Source Email</span>
+                        </li>
+                        <li id="step2Indicator" class="flex items-center opacity-40">
+                             <span class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-300 text-gray-600 font-bold mr-4">2</span>
+                            <span class="font-semibold text-gray-600">Review Metadata</span>
+                        </li>
+                        <li id="step3Indicator" class="flex items-center opacity-40">
+                             <span class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-300 text-gray-600 font-bold mr-4">3</span>
+                            <span class="font-semibold text-gray-600">Map Columns</span>
+                        </li>
+                    </ul>
+                    
+                    <div class="mt-8 pt-6 border-t border-gray-100">
+                        <button id="resetFlowBtn" class="text-sm text-gray-500 hover:text-red-500 flex items-center">
+                            <i class="fas fa-undo mr-2"></i> Reset Process
+                        </button>
                     </div>
-                    <button type="button" id="extractHeadersButton" class="w-full sm:w-auto bg-quarterly text-white font-semibold py-2 px-6 rounded-lg hover:bg-quarterly/80 transition duration-150 shadow-md">
-                        Extract Headers
-                    </button>
                 </div>
-                <p id="templateFileError" class="text-sm text-red-500 mt-2 hidden">Please upload a file first.</p>
-            </div>
+            </aside>
 
-            <hr class="border-gray-200 mb-8">
-
-            <!-- Template Naming and Preview -->
-            <div id="templateNamingSection" class="mb-8 hidden">
-                <label for="template_name" class="block text-sm font-medium text-gray-700">Template Name</label>
-                <input type="text" id="template_name" name="template_name" required 
-                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 text-lg font-bold focus:ring-primary focus:border-primary placeholder-gray-400" 
-                       placeholder="e.g., Cipla Vendor Template 2024">
-                <p id="templateNamePreview" class="text-xs text-gray-500 mt-2"></p>
-            </div>
-
-            <!-- Mapping Fields (Dropdowns) -->
-            <div id="mappingSection" class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 hidden">
-                <!-- Dropdowns will be populated here by JavaScript -->
-            </div>
-            
-            <p id="mappingError" class="text-sm text-red-500 mt-4 hidden"></p>
-
-            <!-- Action Buttons for Initial Mapping (REPLACED ORIGINAL SUBMIT BUTTON) -->
-            <div id="initialActionButtons" class="mt-8 flex justify-end hidden">
-                <!-- This button now starts the date format validation process -->
-                <button type="button" id="startValidationButton" class="bg-primary text-white font-semibold py-3 px-8 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md mr-4">
-                    Save Template
-                </button>
-                <button type="button" id="updateTemplateButton" class="bg-primary text-white font-semibold py-3 px-8 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md mr-4 hidden">
-                    Update Template
-                </button>
-                <button type="button" id="resetFormButton" class="bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg hover:bg-gray-500 transition duration-150 shadow-md" onclick="resetForm()">
-                    Cancel
-                </button>
-            </div>
-
-            <!-- NEW: Date Format Validation Section (Hidden by Default) -->
-            <div id="dateFormatValidationSection" class="hidden bg-tertiary p-6 rounded-xl shadow-lg border border-primary/20 mt-8">
-                <h2 class="text-xl font-bold text-primary mb-4">Step 2: Validate Date Formats</h2>
-                <p class="text-sm text-gray-600 mb-6">
-                    Please observe the sample date value from the second row and provide the correct **MySQL date format string** (e.g., if the sample is `23/12/2023`, the format is `%d/%m/%Y`). 
-                    Refer to MySQL's `STR_TO_DATE` format specifiers.
-                </p>
+            <!-- Right Column: Content -->
+            <div class="lg:col-span-2 space-y-8">
                 
-                <div id="dateFieldsContainer" class="space-y-4">
-                    <!-- Dynamic date fields will be inserted here by ImportTemplate.js -->
+                <!-- Step 1 Card -->
+                <div id="step1Card" class="step-card p-8">
+                    <label class="block text-lg font-semibold text-gray-800 mb-3">Find Source Email</label>
+                    <div class="flex flex-col gap-4">
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <input type="text" id="emailSearchKeyword" placeholder="Search by Sender (e.g., invoice@vendor.com) or Subject..." class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-3 border text-sm">
+                            <button id="searchEmailsBtn" class="bg-blue-600 text-white px-5 py-3 rounded-lg hover:bg-blue-700 shadow font-semibold flex items-center justify-center gap-2 transition">
+                                <i class="fas fa-search"></i> Find Emails
+                            </button>
+                        </div>
+                        
+                        <!-- Email Candidates List -->
+                        <div id="emailCandidatesList" class="hidden space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50">
+                            <!-- JS will populate candidates here -->
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">Search for the email containing the invoice attachment you want to configure.</p>
                 </div>
                 
-                <div class="mt-6 flex justify-end">
-                    <button type="button" id="validateFormatButton" class="bg-quarterly text-white font-semibold py-2 px-6 rounded-lg hover:bg-quarterly/80 transition duration-150 shadow-md mr-4">
-                        Validate Date Format
-                    </button>
-                    <button type="button" id="saveTemplateFinalButton" class="bg-primary text-white font-semibold py-2 px-6 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md hidden">
-                        Confirm & Save Template
-                    </button>
-                    <button type="button" id="updateTemplateFinalButton" class="bg-primary text-white font-semibold py-2 px-6 rounded-lg hover:bg-primary/80 transition duration-150 shadow-md hidden">
-                        Confirm & Update Template
-                    </button>
+                <!-- Step 2 Card (Hidden) -->
+                <div id="metadataSection" class="step-card p-8 hidden">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-6">Extracted Metadata</h2>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Distributor Name</label>
+                            <input type="text" id="distributorName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-2 border bg-gray-50">
+                        </div>
+                        <div>
+                             <label class="block text-sm font-medium text-gray-700">Sender Email</label>
+                            <input type="text" id="emailSender" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-2 border bg-gray-50">
+                            <p class="text-[10px] text-gray-400 mt-1 italic">Identifier for future automation.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Subject Keyword</label>
+                            <input type="text" id="subjectKeyword" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-2 border">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">File Type</label>
+                            <select id="fileType" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-2 border">
+                                <option value="both">Auto-Detect</option>
+                                <option value="csv">CSV Only</option>
+                                <option value="xlsx">Excel Only</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Email Content Inspector -->
+                    <div class="mt-8 border-t border-gray-100 pt-6">
+                        <h3 class="text-md font-bold text-gray-700 mb-4 flex items-center justify-between">
+                            <span>Smart Data Extraction</span>
+                            <div class="space-x-2">
+                                <button id="btnSelectInvoice" class="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 transition selection-mode-btn" data-mode="invoice">
+                                    <i class="fas fa-file-invoice mr-1"></i> Select Invoice No
+                                </button>
+                                <button id="btnSelectDate" class="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 transition selection-mode-btn" data-mode="date">
+                                    <i class="fas fa-calendar-alt mr-1"></i> Select Date
+                                </button>
+                            </div>
+                        </h3>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 space-y-4">
+                            <!-- Subject Viewer -->
+                            <div>
+                                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Subject Line</label>
+                                <div id="viewerSubject" class="bg-white p-3 rounded border border-gray-300 text-sm font-mono mt-1 cursor-text selection:bg-yellow-200">
+                                    <!-- Subject text will be injected here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Body Viewer -->
+                            <div>
+                                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email Body (Text)</label>
+                                <div id="viewerBody" class="bg-white p-3 rounded border border-gray-300 text-sm font-mono mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap cursor-text selection:bg-yellow-200">
+                                    <!-- Body text will be injected here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Extracted Results Preview -->
+                        <div id="extractionPreview" class="mt-4 hidden">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-green-50 p-3 rounded border border-green-100">
+                                    <span class="text-xs text-green-700 font-bold block">Invoice No Config</span>
+                                    <div id="previewInvoice" class="text-sm font-medium text-gray-800 mt-1">--</div>
+                                    <div class="text-[10px] text-gray-500 font-mono mt-1 truncate" id="regexInvoice"></div>
+                                </div>
+                                <div class="bg-blue-50 p-3 rounded border border-blue-100">
+                                    <span class="text-xs text-blue-700 font-bold block">Date Config</span>
+                                    <div id="previewDate" class="text-sm font-medium text-gray-800 mt-1">--</div>
+                                    <div class="text-[10px] text-gray-500 font-mono mt-1 truncate" id="regexDate"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 flex justify-end">
+                        <button id="analyzeBtn" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 shadow font-semibold flex items-center justify-center gap-2 transition-transform transform hover:scale-105">
+                            <i class="fas fa-file-invoice"></i> Analyze File
+                        </button>
+                    </div>
                 </div>
-                <p id="formatValidationError" class="text-sm text-red-500 mt-3 hidden"></p>
-            </div>
 
-        </form>
-
-        <!-- Saved Templates Section -->
-        <section class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-gray-200">
-            <h2 class="text-xl font-bold text-primary mb-4 border-b pb-2">Saved Templates</h2>
-            <div id="savedTemplatesList" class="space-y-3">
-                <p class="text-gray-500 text-center py-4">Loading templates...</p>
-            </div>
-        </section>
-
-    </div>
-
-    <!-- Message Modal/Toast Container -->
-    <div id="messageContainer" class="fixed top-5 right-5 z-50 space-y-3">
-        <!-- Messages will appear here -->
-    </div>
-
-    <!-- Smart Template Detection Modal -->
-    <div id="smartTemplateModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-300">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
-            <!-- Header -->
-            <div class="bg-gradient-to-r from-primary to-green-700 p-5 flex items-center">
-                <div class="bg-white/20 p-2 rounded-full mr-3">
-                    <i class="fas fa-magic text-white text-xl"></i>
+                <!-- Step 3 Card (Hidden) -->
+                <div id="mappingSection" class="step-card p-6 hidden">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-6">Smart Column Mapping</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="border-b-2 border-gray-200">
+                                <tr>
+                                    <th class="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-5/12">File Header (Searchable)</th>
+                                    <th class="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-5/12">System Field (Target)</th>
+                                    <th class="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-2/12">Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mappingTableBody">
+                                <!-- JS will render rows here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-8 flex justify-end">
+                        <button id="saveConfigBtn" class="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 shadow-md flex items-center gap-3 text-lg font-medium transition-transform transform hover:scale-105">
+                            <i class="fas fa-check-circle"></i> Save Configuration
+                        </button>
+                    </div>
                 </div>
-                <h3 class="text-xl font-bold text-white">Smart Detection</h3>
-            </div>
-            
-            <!-- Body -->
-            <div class="p-6">
-                <p class="text-gray-700 text-lg mb-2">We found a matching structure!</p>
-                <p class="text-sm text-gray-500 mb-6">
-                    The uploaded file has the same columns as the existing template:
-                    <br>
-                    <span id="detectedTemplateName" class="font-bold text-primary text-lg block mt-2 p-2 bg-green-50 border border-green-100 rounded"></span>
-                </p>
-                <p class="text-sm text-gray-600">Would you like to auto-fill the mappings from this template?</p>
-            </div>
-
-            <!-- Footer -->
-            <div class="bg-gray-50 px-6 py-4 flex justify-end space-x-3 border-t border-gray-100">
-                <button id="btnDeclineSmartCopy" class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition shadow-sm">
-                    No, Start Fresh
-                </button>
-                <button id="btnAcceptSmartCopy" class="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-green-800 transition shadow-md flex items-center">
-                    <i class="fas fa-copy mr-2"></i> Yes, Use Settings
-                </button>
             </div>
         </div>
+
+        <!-- VIEW 2: MANAGE EXISTING (Hidden) -->
+        <div id="viewManage" class="hidden">
+            <div class="step-card p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-gray-800">Existing Distributor Configurations</h2>
+                    <button id="refreshListBtn" class="text-gray-500 hover:text-primary transition">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Distributor</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email Sender</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Smart Link</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="configListBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Rows populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </div>
 
+    <!-- Hidden Data Store -->
+    <input type="hidden" id="emailUid">
+    <input type="hidden" id="fileName">
+    <!-- Stores the DB Config ID if we are editing -->
+    <input type="hidden" id="editingConfigId"> 
+    <datalist id="fileHeadersList"></datalist>
 
-    <!-- External Libraries and Custom Scripts -->
-    <!-- Mock XLSX - should be replaced with real script in production -->
-    <script>
-        const XLSX = {
-            read: (data, opts) => {
-                console.log("XLSX.read simulation called.");
-                return { 
-                    SheetNames: ['Sheet1'], 
-                    Sheets: { 
-                        'Sheet1': { 
-                            // Mock cells including header (A1, B1) and second row (A2, B2)
-                            'A1': { v: 'Invoice No' }, 
-                            'B1': { v: 'Vendor Name' },
-                            'C1': { v: 'Invoice Date' },
-                            
-                            // Mock second row data: one number, one string, one date-like
-                            'A2': { v: 12345 },
-                            'B2': { v: 'Cipla Ltd' },
-                            'C2': { v: '23/12/2023' }, // Date sample
-                            
-                            '!ref': 'A1:C2' // Defines the range
-                        } 
-                    } 
-                };
-            },
-            utils: {
-                sheet_to_json: (sheet, opts) => {
-                    console.log("XLSX.utils.sheet_to_json simulation called.");
-                    // Mock function to simulate converting sheet to JSON, specifically for headers
-                    const range = XLSX.utils.decode_range(sheet['!ref']);
-                    const headers = [];
-                    // Extract headers from the mock cells
-                    for (let C = range.s.c; C <= range.e.c; ++C) {
-                        const cellAddress = XLSX.utils.encode_cell({c: C, r: range.s.r});
-                        if(sheet[cellAddress]) {
-                            headers.push(sheet[cellAddress].v);
-                        }
-                    }
-                    return headers.length > 0 ? [Object.fromEntries(headers.map(h => [h, '']))] : [];
-                },
-                decode_range: (range) => {
-                    // Mock range decoder
-                    return { s: { c: 0, r: 0 }, e: { c: 10, r: 0 } }; // A1 to K1 (0-indexed)
-                },
-                encode_cell: (cell) => {
-                    // Mock cell encoder
-                    const colLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                    return colLetters[cell.c] + (cell.r + 1);
-                }
-            }
-        };
-
-
-    </script>
-    <!-- Link to Custom JavaScript file -->
-    <script src="/js/ImportTemplate.js"></script>
+    <script src="../js/ImportTemplate.js"></script>
 </body>
 </html>

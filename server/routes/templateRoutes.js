@@ -52,6 +52,7 @@ const upload = multer({ storage: storage });
 
 
 const { PythonShell } = require('python-shell');
+const gmailService = require('../services/gmailService');
 
 // --- Route for file upload and header extraction ---
 router.post('/extract-headers', [requireAuth, upload.single('template_file')], (req, res) => {
@@ -61,20 +62,49 @@ router.post('/extract-headers', [requireAuth, upload.single('template_file')], (
     }
 
     const tempFilePath = req.file.path;
+    processHeaderExtraction(res, tempFilePath);
+});
+
+// --- NEW ROUTE: Extract headers from Gmail Attachment ---
+router.post('/extract-headers-from-gmail', requireAuth, async (req, res) => {
+    const { uid, filename } = req.body;
+
+    if (!uid || !filename) {
+        return res.status(400).json({ success: false, error: 'Missing UID or filename.' });
+    }
+
+    try {
+        // 1. Download the file from Gmail
+        const downloadResult = await gmailService.downloadAttachment(uid, filename);
+
+        if (!downloadResult.success) {
+            return res.status(500).json({ success: false, error: downloadResult.error });
+        }
+
+        const tempFilePath = downloadResult.filePath;
+        
+        // 2. Process using the same logic as file upload
+        processHeaderExtraction(res, tempFilePath);
+
+    } catch (error) {
+        console.error('Gmail Header Extraction Error:', error);
+        res.status(500).json({ success: false, error: 'An error occurred while processing the Gmail attachment.' });
+    }
+});
+
+// Helper function to run the python script and return response
+function processHeaderExtraction(res, tempFilePath) {
     const pythonScriptPath = path.resolve(__dirname, '..', 'python-services', 'extract_headers.py');
 
     // Configure python-shell options
     let options = {
         mode: 'text',
-        pythonPath: 'python', // Default to 'python'. Docker container will use its PATH.
+        pythonPath: 'python', // Default to 'python'
         pythonOptions: ['-u'], // get print results in real-time
         scriptPath: path.dirname(pythonScriptPath),
         args: [tempFilePath]
     };
     
-    // Adjust pythonPath for Linux/Docker if needed, though usually 'python' or 'python3' works if in PATH.
-    // In many Docker images, 'python' is aliased to python3. 
-    // If strict 'python3' is needed on Linux:
     if (process.platform === 'linux') {
         options.pythonPath = 'python3';
     }
@@ -83,12 +113,9 @@ router.post('/extract-headers', [requireAuth, upload.single('template_file')], (
     PythonShell.run('extract_headers.py', options).then(messages => {
         // Cleanup file
         fs.unlink(tempFilePath, (err) => {
-            if (err) console.error('Error deleting uploaded file:', err);
+            if (err) console.error('Error deleting temp file:', err);
         });
         
-        // messages is an array of strings (stdout lines)
-        // We expect the last line to be our JSON result, or the whole output joined if printed as one block.
-        // Our script prints one JSON block.
         try {
             const resultString = messages.join(''); 
             const result = JSON.parse(resultString);
@@ -98,6 +125,7 @@ router.post('/extract-headers', [requireAuth, upload.single('template_file')], (
                     success: true,
                     headers: result.headers,
                     sample_values: result.sample_values,
+                    column_metadata: result.column_metadata, // Ensure metadata is passed back
                     message: `Headers extracted successfully from ${result.file_type} file.`
                 });
             } else {
@@ -124,7 +152,7 @@ router.post('/extract-headers', [requireAuth, upload.single('template_file')], (
             details: err.message 
         });
     });
-});
+}
 
 
 // Route to find a matching template based on file headers

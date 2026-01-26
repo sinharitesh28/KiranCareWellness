@@ -2,24 +2,19 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const dayjs = require('dayjs');
 
 // Helper to get date range conditions
 function getDateCondition(period, customStart, customEnd) {
     let dateCondition = '';
     let params = [];
     
-    const today = new Date();
-    
     if (period === '15days') {
-        const pastDate = new Date();
-        pastDate.setDate(today.getDate() - 15);
         dateCondition = 'AND t.transaction_date >= ?';
-        params.push(pastDate.toISOString().split('T')[0]);
+        params.push(dayjs().subtract(15, 'day').startOf('day').format('YYYY-MM-DD HH:mm:ss'));
     } else if (period === '1month') {
-        const pastDate = new Date();
-        pastDate.setDate(today.getDate() - 30);
         dateCondition = 'AND t.transaction_date >= ?';
-        params.push(pastDate.toISOString().split('T')[0]);
+        params.push(dayjs().subtract(1, 'month').startOf('day').format('YYYY-MM-DD HH:mm:ss'));
     } else if (period === 'custom' && customStart && customEnd) {
         dateCondition = 'AND DATE(t.transaction_date) BETWEEN ? AND ?';
         params.push(customStart, customEnd);
@@ -112,53 +107,41 @@ router.get('/stock-status', requireAuth, async (req, res) => {
 // 3. ABC Analysis
 router.get('/abc-analysis', requireAuth, async (req, res) => {
     try {
-        // We ignore date filters for Inventory ABC Analysis as it's a snapshot of CURRENT stock
-        // Logic: 
-        // 1. Get current Quantity (Unit Count) for each item
-        // 2. Get Last Import Rate (Cost Price)
-        // 3. Calculate Value = Quantity * Last Rate
-        
+        // Optimized ABC Analysis using a window function to find the last rate 
+        // and standard aggregation for unit counts.
         const abcSql = `
+            WITH LastRates AS (
+                SELECT 
+                    item_name, 
+                    rate,
+                    ROW_NUMBER() OVER (PARTITION BY item_name ORDER BY id DESC) as rn
+                FROM import_stock_detail
+            )
             SELECT 
                 d.item_name,
                 SUM(d.quantity) as unit_count,
-                (
-                    SELECT d2.rate
-                    FROM import_stock_detail d2
-                    JOIN import_stock_master m2 ON d2.master_id = m2.id
-                    WHERE d2.item_name = d.item_name
-                    ORDER BY m2.import_date DESC, d2.id DESC
-                    LIMIT 1
-                ) as last_import_rate
+                lr.rate as last_import_rate
             FROM import_stock_detail d
-            GROUP BY d.item_name
+            LEFT JOIN LastRates lr ON d.item_name = lr.item_name AND lr.rn = 1
+            GROUP BY d.item_name, lr.rate
+            HAVING unit_count > 0
             ORDER BY unit_count DESC
         `;
 
         const [results] = await db.promise().query(abcSql);
 
-        // Process data
-        let processedData = results.map(item => {
-            const count = parseFloat(item.unit_count) || 0;
-            const rate = parseFloat(item.last_import_rate) || 0;
-            const value = count * rate;
-            
-            return {
-                item_name: item.item_name,
-                unit_count: count,
-                last_import_rate: rate,
-                inventory_value: value
-            };
-        });
+        // Process data for classification
+        let processedData = results.map(item => ({
+            item_name: item.item_name,
+            unit_count: parseFloat(item.unit_count) || 0,
+            unit_rate: parseFloat(item.last_import_rate) || 0,
+            inventory_value: (parseFloat(item.unit_count) || 0) * (parseFloat(item.last_import_rate) || 0)
+        }));
 
-        // Filter out negative stock if any (optional, but good for safety)
-        // processedData = processedData.filter(i => i.unit_count >= 0);
-
-        // Sort by Inventory Value DESC
+        // Sort by Inventory Value DESC for ABC logic
         processedData.sort((a, b) => b.inventory_value - a.inventory_value);
 
         const totalValue = processedData.reduce((sum, item) => sum + item.inventory_value, 0);
-        
         let accumulatedValue = 0;
         
         const classifiedData = processedData.map(item => {
@@ -171,17 +154,14 @@ router.get('/abc-analysis', requireAuth, async (req, res) => {
             else if (cumulativePercentage <= 90) category = 'B';
             
             return {
-                item_name: item.item_name,
-                unit_count: item.unit_count,
-                unit_rate: item.last_import_rate,
-                value: item.inventory_value, // Total Inventory Value
+                ...item,
+                value: item.inventory_value,
                 percentage: percentage,
                 cumulative_percentage: cumulativePercentage,
                 category: category
             };
         });
 
-        // Group summary for chart
         const summary = {
             A: classifiedData.filter(i => i.category === 'A').length,
             B: classifiedData.filter(i => i.category === 'B').length,

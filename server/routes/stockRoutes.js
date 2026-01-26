@@ -105,57 +105,51 @@ function extractPackingValue(packingString) {
     return null;
 }
 
-// Function to parse date based on format
-function parseDate(dateString, format) {
-    if (!dateString || !format) return null;
-    
-    try {
-        dateString = String(dateString).trim();
-        if (!dateString || dateString === 'N/A' || dateString === '') return null;
+const dayjs = require('dayjs');
+const customParseFormat = require('dayjs/plugin/customParseFormat');
+const utc = require('dayjs/plugin/utc');
 
-        const formatMap = {
-            '%d/%m/%Y': (str) => {
-                const parts = str.split('/');
-                if (parts.length === 3) {
-                    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                }
-                return null;
-            },
-            '%m/%d/%Y': (str) => {
-                const parts = str.split('/');
-                if (parts.length === 3) {
-                    return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
-                }
-                return null;
-            },
-            '%Y-%m-%d': (str) => str,
-            '%d-%m-%Y': (str) => {
-                const parts = str.split('-');
-                if (parts.length === 3) {
-                    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                }
-                return null;
-            },
-            '%Y/%m/%d': (str) => {
-                const parts = str.split('/');
-                if (parts.length === 3) {
-                    return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-                }
-                return null;
-            }
-        };
+dayjs.extend(customParseFormat);
+dayjs.extend(utc);
 
-        const parser = formatMap[format];
-        if (parser) {
-            return parser(dateString);
-        }
+// Function to parse date based on format or auto-detect
+function parseDate(dateString, explicitFormat) {
+    if (!dateString) return null;
+    const str = String(dateString).trim();
+    if (str === '' || str === 'N/A' || str === 'null') return null;
 
-        const date = new Date(dateString);
-        return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
-    } catch (error) {
-        console.error('Error parsing date:', error);
-        return null;
+    // 1. Explicit Format (High Priority)
+    if (explicitFormat) {
+        // Map Python/Old formats to Dayjs tokens if needed, but dayjs covers most
+        // Mapping simple old tokens: %d->DD, %m->MM, %Y->YYYY
+        const dayjsFormat = explicitFormat
+            .replace('%d', 'DD').replace('%m', 'MM').replace('%Y', 'YYYY').replace('%y', 'YY');
+        
+        const d = dayjs(str, dayjsFormat, true); // Strict parsing
+        if (d.isValid()) return d.format('YYYY-MM-DD');
     }
+
+    // 2. Auto-Detect / List of Known Formats
+    const knownFormats = [
+        'YYYY-MM-DD',
+        'DD/MM/YYYY', 'D/M/YYYY',
+        'MM/DD/YYYY', 'M/D/YYYY',
+        'DD-MM-YYYY', 'D-M-YYYY',
+        'DD.MM.YYYY', 'D.M.YYYY',
+        'YYYY/MM/DD',
+        'DD MMM YYYY', 'D MMM YYYY',
+        'DD-MMM-YYYY',
+        'MMM DD, YYYY'
+    ];
+
+    const d = dayjs(str, knownFormats, true); // Attempt strict parse against list
+    if (d.isValid()) return d.format('YYYY-MM-DD');
+
+    // 3. Fallback to loose parsing (ISO 8601 etc)
+    const loose = dayjs(str);
+    if (loose.isValid()) return loose.format('YYYY-MM-DD');
+
+    return null;
 }
 
 // Function to generate unique barcode
@@ -210,55 +204,41 @@ router.post('/process-file', requireAuth, (req, res, next) => {
     });
 });
 
-// Function to check for duplicate stocks (Promisified)
-function checkDuplicateStocks(templateId, invoiceNo, stockDetails) {
-    return new Promise((resolve, reject) => {
-        const duplicateCheckQuery = `
-            SELECT d.item_name, d.batch_number 
-            FROM import_stock_detail d
-            INNER JOIN import_stock_master m ON d.master_id = m.id
-            WHERE m.template_id = ? 
-            AND m.invoice_no = ? 
-            AND d.item_name = ? 
-            AND (d.batch_number = ? OR (d.batch_number IS NULL AND ? IS NULL))
-        `;
+// Function to check for duplicate stocks (Promisified and Optimized)
+async function checkDuplicateStocks(templateId, invoiceNo, stockDetails) {
+    if (stockDetails.length === 0) return { duplicates: [], uniqueItems: [] };
 
-        const duplicates = [];
-        const uniqueItems = [];
-        
-        if (stockDetails.length === 0) {
-            return resolve({ duplicates: [], uniqueItems: [] });
-        }
+    const duplicates = [];
+    const uniqueItems = [];
+    const itemNames = [...new Set(stockDetails.map(i => i.item_name))];
 
-        // Use Promise.all for parallel checking
-        const checks = stockDetails.map(async (item, index) => {
-            const batchNumber = item.batch_number || null;
-            try {
-                const [results] = await db.promise().query(
-                    duplicateCheckQuery, 
-                    [templateId, invoiceNo, item.item_name, batchNumber, batchNumber]
-                );
-                
-                if (results.length > 0) {
-                    duplicates.push({
-                        item_name: item.item_name,
-                        batch_number: item.batch_number,
-                        originalIndex: index,
-                        existingRecord: results[0]
-                    });
-                } else {
-                    uniqueItems.push({ ...item, originalIndex: index });
-                }
-            } catch (err) {
-                console.error('Error checking duplicate for item:', item.item_name, err);
+    try {
+        const [existingRecords] = await db.promise().query(
+            `SELECT d.item_name, d.batch_number 
+             FROM import_stock_detail d
+             INNER JOIN import_stock_master m ON d.master_id = m.id
+             WHERE m.template_id = ? AND m.invoice_no = ? AND d.item_name IN (?)`,
+            [templateId, invoiceNo, itemNames]
+        );
+
+        stockDetails.forEach((item, index) => {
+            const isDuplicate = existingRecords.some(r => 
+                r.item_name === item.item_name && 
+                (r.batch_number === item.batch_number || (!r.batch_number && !item.batch_number))
+            );
+
+            if (isDuplicate) {
+                duplicates.push({ item_name: item.item_name, batch_number: item.batch_number, originalIndex: index });
+            } else {
                 uniqueItems.push({ ...item, originalIndex: index });
             }
         });
 
-        Promise.all(checks)
-            .then(() => resolve({ duplicates, uniqueItems }))
-            .catch(reject);
-    });
+        return { duplicates, uniqueItems };
+    } catch (err) {
+        console.error('Error in batch duplicate check:', err);
+        return { duplicates: [], uniqueItems: stockDetails };
+    }
 }
 
 // 2. Route for final stock import with ALL data and barcode generation
@@ -314,6 +294,16 @@ router.post('/import-stocks', requireAuth, async (req, res) => {
                 parsedMasterData.invoice_date = parseDate(masterData.invoice_date, template.invoice_date_format);
             }
 
+            // Fallback: Check if invoice_date is still in DD/MM/YYYY format and convert to YYYY-MM-DD
+            // This catches cases where template format is missing but date comes in as DD/MM/YYYY
+            if (parsedMasterData.invoice_date && typeof parsedMasterData.invoice_date === 'string') {
+                // Check for DD/MM/YYYY
+                const dmyMatch = parsedMasterData.invoice_date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                if (dmyMatch) {
+                    parsedMasterData.invoice_date = `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+                }
+            }
+
             // 1. Insert into import_stock_master
             const masterSql = 'INSERT INTO import_stock_master (template_id, invoice_no, invoice_date, vendor_name, imported_by_user_id) VALUES (?, ?, ?, ?, ?)';
             const masterValues = [
@@ -333,9 +323,15 @@ router.post('/import-stocks', requireAuth, async (req, res) => {
                 VALUES ?`;
             
             const detailValues = uniqueItems.map((item, index) => {
-                let parsedExpiryDate = item.expiry_date;
+                let parsedExpiryDate = null;
+                
+                // 1. Try Template Format
                 if (template.expiry_date_format && item.expiry_date) {
                     parsedExpiryDate = parseDate(item.expiry_date, template.expiry_date_format);
+                } 
+                // 2. Try Auto-Detect (Day.js)
+                else if (item.expiry_date) {
+                    parsedExpiryDate = parseDate(item.expiry_date);
                 }
 
                 const packingValue = item.packing && typeof item.packing === 'string' 
@@ -461,21 +457,15 @@ router.post('/get-last-locations', requireAuth, async (req, res) => {
     }
 });
 
-// Route to fetch stock sheet data
+// Route to fetch stock sheet data (Optimized with SQL calculations)
 router.get('/stock-sheet', requireAuth, async (req, res) => {
     try {
         const stockSheetQuery = `
             SELECT 
-                d.id,
-                d.item_name,
-                d.batch_number,
-                d.expiry_date,
-                d.quantity AS standard_stock,
-                d.loose_quantity AS loose_stock,
-                d.packing,
-                d.mrp,
-                d.rate,
-                m.vendor_name
+                d.id, d.item_name, d.batch_number, d.expiry_date,
+                d.quantity AS standard_stock, d.loose_quantity AS loose_stock,
+                d.packing, d.mrp, d.rate, m.vendor_name,
+                ( (d.quantity * d.rate) + (d.loose_quantity * (d.rate / NULLIF(d.packing, 0))) ) as calculated_value
             FROM import_stock_detail d
             LEFT JOIN import_stock_master m ON d.master_id = m.id
             WHERE d.quantity > 0 OR d.loose_quantity > 0
@@ -484,28 +474,173 @@ router.get('/stock-sheet', requireAuth, async (req, res) => {
 
         const [results] = await db.promise().query(stockSheetQuery);
 
-        // Process results to calculate value and format dates
-        const processedResults = results.map(item => {
-            const packing = parseInt(item.packing) || 1;
-            const standardValue = item.quantity * item.rate;
-            // Loose stock value is loose_quantity * (rate / packing)
-            const looseValue = item.loose_quantity * (item.rate / packing);
-            const totalValue = standardValue + looseValue;
+        const processedResults = results.map(item => ({
+            ...item,
+            value: parseFloat(item.calculated_value || 0).toFixed(2),
+            expiry_date: item.expiry_date ? dayjs(item.expiry_date).format('YYYY-MM-DD') : 'N/A'
+        }));
 
-            return {
-                ...item,
-                value: totalValue.toFixed(2), // Format as string with 2 decimals
-                expiry_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split('T')[0] : 'N/A'
-            };
-        });
-
-        res.json({
-            success: true,
-            data: processedResults
-        });
+        res.json({ success: true, data: processedResults });
     } catch (err) {
         console.error('Error fetching stock sheet data:', err);
         res.status(500).json({ success: false, error: 'Database error fetching stock sheet.' });
+    }
+});
+
+const gmailService = require('../services/gmailService');
+
+// --- Distributor Configuration Routes ---
+
+// Create new config
+router.post('/distributor-config', requireAuth, async (req, res) => {
+    const { 
+        distributor_name, 
+        email_sender, 
+        subject_match_type, 
+        subject_keyword, 
+        file_type_preference, 
+        template_id 
+    } = req.body;
+
+    if (!distributor_name || !email_sender) {
+        return res.status(400).json({ success: false, error: 'Distributor Name and Email Sender are required.' });
+    }
+
+    try {
+        const sql = `INSERT INTO distributor_email_config 
+            (distributor_name, email_sender, subject_match_type, subject_keyword, file_type_preference, template_id) 
+            VALUES (?, ?, ?, ?, ?, ?)`;
+        
+        await db.promise().query(sql, [
+            distributor_name, 
+            email_sender, 
+            subject_match_type || 'contains', 
+            subject_keyword || '', 
+            file_type_preference || 'both', 
+            template_id || null
+        ]);
+
+        res.json({ success: true, message: 'Configuration saved successfully.' });
+    } catch (err) {
+        console.error('Error saving distributor config:', err);
+        res.status(500).json({ success: false, error: 'Database error.' });
+    }
+});
+
+// List all configs
+router.get('/distributor-config', requireAuth, async (req, res) => {
+    try {
+        const sql = `SELECT c.*, t.template_name 
+            FROM distributor_email_config c 
+            LEFT JOIN importTemplate t ON c.template_id = t.id 
+            ORDER BY c.distributor_name ASC`;
+        const [rows] = await db.promise().query(sql);
+        res.json({ success: true, configs: rows });
+    } catch (err) {
+        console.error('Error fetching distributor configs:', err);
+        res.status(500).json({ success: false, error: 'Database error.' });
+    }
+});
+
+// Delete config
+router.delete('/distributor-config/:id', requireAuth, async (req, res) => {
+    try {
+        await db.promise().query('DELETE FROM distributor_email_config WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'Configuration deleted.' });
+    } catch (err) {
+        console.error('Error deleting config:', err);
+        res.status(500).json({ success: false, error: 'Database error.' });
+    }
+});
+
+
+// --- Gmail Integration Routes ---
+
+// Route to scan Gmail inbox for CSVs with advanced filters
+router.get('/gmail/scan', requireAuth, async (req, res) => {
+    try {
+        const filters = {
+            sender: req.query.sender,
+            subjectKeyword: req.query.subjectKeyword,
+            fileType: req.query.fileType,
+            fromDate: req.query.fromDate,      // New: From Date
+            toDate: req.query.toDate,          // New: To Date
+            specificInvoiceNo: req.query.invoiceNo,
+            specificDate: req.query.specificDate,
+            regexConfig: null
+        };
+
+        // If ID provided, fetch config first
+        if (req.query.configId) {
+            const [rows] = await db.promise().query(
+                'SELECT email_sender, subject_keyword, file_type_preference, invoice_no_regex, invoice_date_regex, invoice_no_source, invoice_date_source FROM distributor_email_config WHERE id = ?', 
+                [req.query.configId]
+            );
+            
+            if (rows.length > 0) {
+                const config = rows[0];
+                filters.sender = config.email_sender;
+                filters.subjectKeyword = config.subject_keyword;
+                filters.fileType = config.file_type_preference;
+                
+                // Pass Regex Config
+                filters.regexConfig = {
+                    invoiceNoRegex: config.invoice_no_regex,
+                    invoiceDateRegex: config.invoice_date_regex,
+                    invoiceNoSource: config.invoice_no_source,
+                    invoiceDateSource: config.invoice_date_source
+                };
+            }
+        }
+
+        const result = await gmailService.fetchStockEmails(filters);
+        if (result.success) {
+            res.json(result);
+        } else {
+            res.status(500).json(result);
+        }
+    } catch (error) {
+        console.error('Gmail Scan Error:', error);
+        res.status(500).json({ success: false, error: 'Failed to scan Gmail inbox.' });
+    }
+});
+
+// Route to process a selected attachment from Gmail
+router.post('/gmail/process', requireAuth, async (req, res) => {
+    const { uid, filename } = req.body;
+
+    if (!uid || !filename) {
+        return res.status(400).json({ success: false, error: 'Missing UID or filename.' });
+    }
+
+    try {
+        // 1. Download the file from Gmail
+        const downloadResult = await gmailService.downloadAttachment(uid, filename);
+
+        if (!downloadResult.success) {
+            return res.status(500).json({ success: false, error: downloadResult.error });
+        }
+
+        const filePath = downloadResult.filePath;
+
+        // 2. Process the file using the existing Python script logic
+        // We reuse the executePythonScript utility function defined above
+        const processingResult = await executePythonScript('extract_data.py', filePath);
+
+        // 3. Clean up the temp file
+        fs.unlink(filePath, (err) => {
+            if (err) console.error('Error deleting temp Gmail file:', err);
+        });
+
+        if (processingResult.success) {
+            res.json(processingResult);
+        } else {
+            res.status(processingResult.status || 500).json(processingResult);
+        }
+
+    } catch (error) {
+        console.error('Gmail Process Error:', error);
+        res.status(500).json({ success: false, error: 'An error occurred while processing the Gmail attachment.' });
     }
 });
 

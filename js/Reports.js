@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         salesChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: data.map(d => new Date(d.date).toLocaleDateString()),
+                labels: data.map(d => dayjs(d.date).format('DD MMM')),
                 datasets: [{
                     label: 'Total Sales (₹)',
                     data: data.map(d => d.total_sales),

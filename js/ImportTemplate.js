@@ -1,1013 +1,544 @@
-// ImportTemplate.js - Updated with edit and delete functionality
-// Updated required fields configuration with systematic sequencing
-const REQUIRED_FIELDS = [
-    // Basic Information
-    { id: 'vendor_detail_col', label: 'Vendor Details Column', required: true },
-    { id: 'invoice_no_col', label: 'Invoice No Column', required: false },
-    { id: 'invoice_date_col', label: 'Invoice Date Column', required: false },
-    
-    // Product Information
-    { id: 'item_name_col', label: 'Item Name Column', required: true },
-    { id: 'item_desc_col', label: 'Item Description Column', required: false },
-    { id: 'manufacturer_col', label: 'Manufacturer Column', required: false },
-    { id: 'batch_number_col', label: 'Batch Number Column', required: false },
-    { id: 'hsn_code_col', label: 'HSN Code Column', required: false },
-    
-    // Quantity and Pricing
-    { id: 'quantity_col', label: 'Quantity Column', required: true },
-    { id: 'free_col', label: 'Free Column', required: false },
-    { id: 'rate_col', label: 'Rate Column', required: true },
-    { id: 'mrp_col', label: 'MRP Column', required: true },
-    
-    // Packing Information
-    { id: 'packing_col', label: 'Packing (Unit Dose Count)', required: false },
-    { id: 'expiry_date_col', label: 'Expiry Date Column', required: false },
-];
-
-const DATE_FIELDS = [
-    { colId: 'invoice_date_col', formatId: 'invoice_date_format', label: 'Invoice Date' },
-    { colId: 'expiry_date_col', formatId: 'expiry_date_format', label: 'Expiry Date' },
-];
-
-let globalHeaders = [];
-let sampleValues = {};
-let columnMetadata = {}; // Store metadata from backend
-let finalTemplateData = {}; // To hold template data after initial check but before final save
-let dateColumnsToValidate = []; // To hold the list of date columns that were mapped by the user
-let isEditing = false; // Flag to track if we are in edit mode
-
-// --- Utility Functions (showMessage) ---
-
-function showMessage(title, message, type = 'info') {
-    // Determine color classes based on message type
-    let bgColor, borderColor, textColor;
-    switch (type) {
-        case 'success':
-            bgColor = 'bg-green-100';
-            borderColor = 'border-green-500';
-            textColor = 'text-green-700';
-            break;
-        case 'error':
-            bgColor = 'bg-red-100';
-            borderColor = 'border-red-500';
-            textColor = 'text-red-700';
-            break;
-        case 'info':
-        default:
-            bgColor = 'bg-blue-100';
-            borderColor = 'border-blue-500';
-            textColor = 'text-blue-700';
-            break;
-    }
-
-    const container = document.getElementById('messageContainer');
-    const messageElement = document.createElement('div');
-    messageElement.className = `p-4 border-l-4 ${borderColor} ${bgColor} ${textColor} rounded-r-lg shadow-lg max-w-sm`;
-    messageElement.innerHTML = `<p class="font-bold">${title}</p><p class="text-sm">${message}</p>`;
-
-    container.prepend(messageElement);
-
-    setTimeout(() => {
-        messageElement.remove();
-    }, 5000);
-}
-
-// --- Initialization and Event Listeners ---
-
 document.addEventListener('DOMContentLoaded', () => {
-    initializeEventListeners();
-    renderMappingSection();
-    addTemplateNamePreview();
-    fetchSavedTemplates(); // Load saved templates on startup
-});
-
-function initializeEventListeners() {
-    document.getElementById('extractHeadersButton').addEventListener('click', handleFileExtraction);
-    document.getElementById('templateForm').addEventListener('submit', (e) => e.preventDefault()); // Prevent default submit on form
+    // --- Elements ---
+    const fetchBtn = document.getElementById('fetchBtn');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const saveConfigBtn = document.getElementById('saveConfigBtn');
+    const resetFlowBtn = document.getElementById('resetFlowBtn');
     
-    // New validation workflow buttons
-    document.getElementById('startValidationButton').addEventListener('click', startDateFormatValidation);
-    document.getElementById('validateFormatButton').addEventListener('click', validateDateFormats);
-    document.getElementById('saveTemplateFinalButton').addEventListener('click', saveTemplate);
-    
-    // Update button (hidden by default)
-    document.getElementById('updateTemplateButton').addEventListener('click', startDateFormatValidation);
-    document.getElementById('updateTemplateFinalButton').addEventListener('click', updateTemplate);
-}
+    // Tabs
+    const tabNew = document.getElementById('tabNew');
+    const tabManage = document.getElementById('tabManage');
+    const viewNewConfig = document.getElementById('viewNewConfig');
+    const viewManage = document.getElementById('viewManage');
+    const refreshListBtn = document.getElementById('refreshListBtn');
 
-// --- UI Rendering Functions ---
-
-function renderMappingSection() {
-    const container = document.getElementById('mappingSection');
-    container.innerHTML = '';
-    
-    REQUIRED_FIELDS.forEach(field => {
-        // Create the div container for the field
-        const div = document.createElement('div');
-        div.className = 'flex flex-col space-y-1 relative searchable-select-container';
-        div.id = `field_container_${field.id}`;
-        
-        // Label
-        const label = document.createElement('label');
-        label.className = 'text-sm font-medium text-gray-700 flex items-center';
-        label.htmlFor = `search_${field.id}`;
-        label.textContent = field.label;
-        if (field.required) {
-            label.innerHTML += ' <span class="text-red-500 ml-1">*</span>';
-        }
-        
-        // Input Wrapper (for icon)
-        const inputWrapper = document.createElement('div');
-        inputWrapper.className = 'relative';
-
-        // Search Input
-        const searchInput = document.createElement('input');
-        searchInput.type = 'text';
-        searchInput.id = `search_${field.id}`;
-        searchInput.placeholder = field.required ? 'Select Column...' : 'Ignore...';
-        searchInput.className = 'mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 pr-8 text-sm focus:ring-primary focus:border-primary bg-white cursor-pointer';
-        searchInput.autocomplete = 'off';
-        
-        // Dropdown Icon (Chevron)
-        const icon = document.createElement('i');
-        icon.className = 'fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform duration-200';
-        icon.id = `icon_${field.id}`;
-
-        // Hidden Input for actual value
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'hidden';
-        hiddenInput.id = field.id;
-        hiddenInput.name = field.id;
-        hiddenInput.required = field.required;
-        
-        // Options Dropdown
-        const dropdown = document.createElement('div');
-        dropdown.id = `dropdown_${field.id}`;
-        dropdown.className = 'absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden top-full left-0';
-        
-        // Append elements
-        inputWrapper.appendChild(searchInput);
-        inputWrapper.appendChild(icon);
-        
-        div.appendChild(label);
-        div.appendChild(inputWrapper);
-        div.appendChild(hiddenInput);
-        div.appendChild(dropdown);
-        container.appendChild(div);
-        
-        // Optional error message below the input
-        const errorMsg = document.createElement('p');
-        errorMsg.id = `${field.id}_error`;
-        errorMsg.className = 'text-xs text-red-500 mt-1 hidden';
-        div.appendChild(errorMsg);
-
-        // Add Event Listeners for search and dropdown
-        setupSearchableSelect(field.id);
-    });
-}
-
-function setupSearchableSelect(fieldId) {
-    const searchInput = document.getElementById(`search_${fieldId}`);
-    const hiddenInput = document.getElementById(fieldId);
-    const dropdown = document.getElementById(`dropdown_${fieldId}`);
-    const icon = document.getElementById(`icon_${fieldId}`);
-
-    const showDropdown = () => {
-        filterOptions(fieldId, searchInput.value);
-        dropdown.classList.remove('hidden');
-        icon.classList.add('rotate-180');
+    // Step Indicators
+    const stepIndicators = {
+        step1: document.getElementById('step1Indicator'),
+        step2: document.getElementById('step2Indicator'),
+        step3: document.getElementById('step3Indicator'),
     };
 
-    const hideDropdown = () => {
-        // Use a small delay so mousedown on dropdown can trigger selectOption first
-        setTimeout(() => {
-            if (!dropdown.classList.contains('hidden')) {
-                dropdown.classList.add('hidden');
-                icon.classList.remove('rotate-180');
-                // Restore search input to reflect current hidden value
-                searchInput.value = hiddenInput.value;
-            }
-        }, 200);
+    // --- Smart Extraction Elements ---
+    const viewerSubject = document.getElementById('viewerSubject');
+    const viewerBody = document.getElementById('viewerBody');
+    const btnSelectInvoice = document.getElementById('btnSelectInvoice');
+    const btnSelectDate = document.getElementById('btnSelectDate');
+    const extractionPreview = document.getElementById('extractionPreview');
+    
+    let currentSelectionMode = null; // 'invoice' or 'date'
+    let extractionConfig = {
+        invoice: { regex: null, source: null, sample: null },
+        date: { regex: null, source: null, sample: null }
     };
 
-    searchInput.addEventListener('focus', showDropdown);
-    searchInput.addEventListener('click', showDropdown);
-
-    searchInput.addEventListener('input', () => {
-        filterOptions(fieldId, searchInput.value);
-        dropdown.classList.remove('hidden');
-        icon.classList.add('rotate-180');
-    });
-
-    searchInput.addEventListener('blur', hideDropdown);
-}
-
-function filterOptions(fieldId, searchText) {
-    const dropdown = document.getElementById(`dropdown_${fieldId}`);
-    const hiddenInput = document.getElementById(fieldId);
-    const searchInput = document.getElementById(`search_${fieldId}`);
-    const field = REQUIRED_FIELDS.find(f => f.id === fieldId);
-    
-    dropdown.innerHTML = '';
-    const text = searchText.toLowerCase();
-
-    // Default option
-    if (!text || '--- select column ---'.includes(text) || '--- ignore ---'.includes(text)) {
-        const defaultDiv = document.createElement('div');
-        defaultDiv.className = 'p-2 text-sm cursor-pointer hover:bg-gray-100 text-gray-500 italic';
-        defaultDiv.textContent = field.required ? '--- Select Column ---' : '--- Ignore ---';
-        // Use mousedown to ensure it fires before blur
-        defaultDiv.onmousedown = (e) => {
-            e.preventDefault(); // Prevent blur from firing immediately
-            selectOption(fieldId, '', '');
-        };
-        dropdown.appendChild(defaultDiv);
-    }
-
-    globalHeaders.forEach(header => {
-        if (header.toLowerCase().includes(text)) {
-            const item = document.createElement('div');
-            item.className = 'p-2 text-sm cursor-pointer hover:bg-gray-100 transition';
-            if (hiddenInput.value === header) {
-                item.classList.add('bg-secondary', 'text-primary', 'font-semibold');
-            }
-            item.textContent = header;
-            // Use mousedown to ensure it fires before blur
-            item.onmousedown = (e) => {
-                e.preventDefault(); // Prevent blur from firing immediately
-                selectOption(fieldId, header, header);
-            };
-            dropdown.appendChild(item);
-        }
-    });
-
-    if (dropdown.innerHTML === '') {
-        const noResult = document.createElement('div');
-        noResult.className = 'p-2 text-sm text-gray-500 italic';
-        noResult.textContent = 'No matching columns found';
-        dropdown.appendChild(noResult);
-    }
-}
-
-function selectOption(fieldId, value, displayText) {
-    const searchInput = document.getElementById(`search_${fieldId}`);
-    const hiddenInput = document.getElementById(fieldId);
-    const dropdown = document.getElementById(`dropdown_${fieldId}`);
-
-    hiddenInput.value = value;
-    searchInput.value = value === '' ? '' : displayText;
-    dropdown.classList.add('hidden');
-
-    // Trigger change event for template name preview
-    const event = new Event('change');
-    hiddenInput.dispatchEvent(event);
-}
-
-
-// Updates dropdowns with extracted headers
-function updateDropdowns(headers) {
-    REQUIRED_FIELDS.forEach(field => {
-        const hiddenInput = document.getElementById(field.id);
-        const searchInput = document.getElementById(`search_${field.id}`);
-        
-        if (hiddenInput && searchInput) {
-            const currentValue = hiddenInput.value;
+    // --- Tab Switching ---
+    function switchTab(view) {
+        if (view === 'new') {
+            viewNewConfig.classList.remove('hidden');
+            viewManage.classList.add('hidden');
             
-            // If the current value is not in the new headers, clear it
-            if (currentValue && !headers.includes(currentValue)) {
-                hiddenInput.value = '';
-                searchInput.value = '';
-            } else if (currentValue) {
-                // Keep the current value
-                searchInput.value = currentValue;
-            }
+            tabNew.classList.add('tab-active', 'border-b-2');
+            tabNew.classList.remove('tab-inactive', 'border-transparent');
+            
+            tabManage.classList.remove('tab-active', 'border-b-2');
+            tabManage.classList.add('tab-inactive', 'border-transparent');
+        } else {
+            viewNewConfig.classList.add('hidden');
+            viewManage.classList.remove('hidden');
+            
+            tabManage.classList.add('tab-active', 'border-b-2');
+            tabManage.classList.remove('tab-inactive', 'border-transparent');
+            
+            tabNew.classList.remove('tab-active', 'border-b-2');
+            tabNew.classList.add('tab-inactive', 'border-transparent');
+            
+            loadConfigs();
         }
-    });
-
-    // Show the mapping and action sections
-    document.getElementById('mappingSection').classList.remove('hidden');
-    document.getElementById('templateNamingSection').classList.remove('hidden');
-    document.getElementById('initialActionButtons').classList.remove('hidden');
-    document.getElementById('dateFormatValidationSection').classList.add('hidden'); // Ensure validation section is hidden
-}
-
-// --- Form Handlers ---
-
-// Handles the file upload and header extraction process
-async function handleFileExtraction() {
-    const fileInput = document.getElementById('template_file');
-    const file = fileInput.files[0];
-    const errorDisplay = document.getElementById('templateFileError');
-    const extractButton = document.getElementById('extractHeadersButton');
-
-    if (!file) {
-        errorDisplay.textContent = 'Please select a file before extracting headers.';
-        errorDisplay.classList.remove('hidden');
-        return;
     }
-    
-    errorDisplay.classList.add('hidden');
-    extractButton.disabled = true;
-    extractButton.textContent = 'Extracting...';
 
-    const formData = new FormData();
-    formData.append('template_file', file);
+    tabNew.addEventListener('click', () => switchTab('new'));
+    tabManage.addEventListener('click', () => switchTab('manage'));
+    resetFlowBtn.addEventListener('click', resetForm);
 
-    try {
-        const response = await fetch('/api/template/extract-headers', {
-            method: 'POST',
-            body: formData
+    function resetForm() {
+        document.getElementById('emailUrl').value = '';
+        document.getElementById('editingConfigId').value = '';
+        document.getElementById('metadataSection').classList.add('hidden');
+        document.getElementById('mappingSection').classList.add('hidden');
+        setActiveStep(1);
+        
+        // Reset Smart Extraction
+        extractionConfig = { invoice: { regex: null, source: null }, date: { regex: null, source: null } };
+        viewerSubject.textContent = '';
+        viewerBody.textContent = '';
+        extractionPreview.classList.add('hidden');
+        resetSelectionButtons();
+    }
+
+    function setActiveStep(stepNumber) {
+        Object.values(stepIndicators).forEach(el => {
+            el.classList.add('opacity-40');
+            el.querySelector('span:first-child').classList.add('bg-gray-300', 'text-gray-600');
+            el.querySelector('span:first-child').classList.remove('bg-primary', 'text-white');
         });
 
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            globalHeaders = result.headers;
-            sampleValues = result.sample_values || {}; // Store sample values globally
-            columnMetadata = result.column_metadata || {}; // Store metadata
-            
-            updateDropdowns(globalHeaders);
-            showMessage('Success', 'Headers extracted and dropdowns updated!', 'success');
-            
-            // Check for smart template match ONLY if we are NOT already editing an existing template
-            if (!isEditing) {
-                updateTemplateNamePreview();
-                checkForSmartTemplateMatch(result.headers);
-            }
-        } else {
-            showMessage('Error', result.error || 'Failed to extract headers.', 'error');
+        const activeStep = stepIndicators[`step${stepNumber}`];
+        if (activeStep) {
+            activeStep.classList.remove('opacity-40');
+            activeStep.querySelector('span:first-child').classList.remove('bg-gray-300', 'text-gray-600');
+            activeStep.querySelector('span:first-child').classList.add('bg-primary', 'text-white');
         }
-    } catch (error) {
-        console.error('Fetch error:', error);
-        showMessage('Network Error', 'A network error occurred during header extraction.', 'error');
-    } finally {
-        extractButton.disabled = false;
-        extractButton.textContent = 'Extract Headers';
     }
-}
 
-// --- Smart Template Detection Logic ---
-
-async function checkForSmartTemplateMatch(headers) {
-    try {
-        const response = await fetch('/api/template/find-matching-template', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ headers })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success && result.matchFound) {
-            // Show Modal
-            const modal = document.getElementById('smartTemplateModal');
-            const nameDisplay = document.getElementById('detectedTemplateName');
-            const btnAccept = document.getElementById('btnAcceptSmartCopy');
-            const btnDecline = document.getElementById('btnDeclineSmartCopy');
-
-            nameDisplay.textContent = result.template.template_name;
-            modal.classList.remove('hidden');
-
-            // Handle Accept
-            btnAccept.onclick = () => {
-                applySmartTemplate(result.template);
-                modal.classList.add('hidden');
-            };
-
-            // Handle Decline
-            btnDecline.onclick = () => {
-                modal.classList.add('hidden');
-            };
-        }
-    } catch (error) {
-        console.error('Smart match error:', error);
-        // Fail silently - user can still map manually
-    }
-}
-
-function applySmartTemplate(template) {
-    // 1. Auto-fill Dropdowns (Mappings)
-    REQUIRED_FIELDS.forEach(field => {
-        const hiddenInput = document.getElementById(field.id);
-        const searchInput = document.getElementById(`search_${field.id}`);
-        const mappedValue = template[field.id];
-
-        if (hiddenInput && searchInput && mappedValue) {
-            hiddenInput.value = mappedValue;
-            searchInput.value = mappedValue;
-        }
-    });
-
-    // 2. Pre-fill Template Name
-    const nameInput = document.getElementById('template_name');
-    nameInput.value = `${template.template_name} (Copy)`;
+    // --- Step 1: Search & Fetch Metadata ---
+    const searchEmailsBtn = document.getElementById('searchEmailsBtn');
+    const candidatesList = document.getElementById('emailCandidatesList');
     
-    // 3. Store the matched template data to use its date formats later
-    // We attach it to the window object or a global var to reuse existing logic
-    window.currentTemplate = template; // Used by generateDateFieldInputs to pre-fill formats
+    // New: Search Candidates
+    searchEmailsBtn.addEventListener('click', async () => {
+        const keyword = document.getElementById('emailSearchKeyword').value.trim();
+        setLoading(searchEmailsBtn, true, 'Searching...');
+        candidatesList.classList.remove('hidden');
+        candidatesList.innerHTML = '<p class="text-center text-gray-500 text-sm py-2">Scanning...</p>';
 
-    showMessage('Smart Copy', `Settings cloned from '${template.template_name}'. Please review and save.`, 'success');
-}
-
-// Validates that all required fields are mapped (not null/empty)
-function validateForm() {
-    let isValid = true;
-    let firstErrorElement = null;
-    document.getElementById('mappingError').classList.add('hidden');
-    
-    // Validate Template Name
-    const templateName = document.getElementById('template_name').value.trim();
-    if (!templateName) {
-        document.getElementById('mappingError').textContent = 'Please provide a name for the template.';
-        document.getElementById('mappingError').classList.remove('hidden');
-        document.getElementById('template_name').focus();
-        return false;
-    }
-
-    // Validate Required Dropdowns
-    REQUIRED_FIELDS.filter(field => field.required).forEach(field => {
-        const select = document.getElementById(field.id);
-        const errorMsg = document.getElementById(`${field.id}_error`);
-        
-        if (select.value === '') {
-            errorMsg.textContent = `${field.label} is required.`;
-            errorMsg.classList.remove('hidden');
-            isValid = false;
-            if (!firstErrorElement) firstErrorElement = select;
-        } else {
-            errorMsg.classList.add('hidden');
-        }
-    });
-    
-    // Scroll to the first error if validation failed
-    if (!isValid && firstErrorElement) {
-        firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        document.getElementById('mappingError').textContent = 'Please map all required fields marked with *.';
-        document.getElementById('mappingError').classList.remove('hidden');
-    }
-
-    return isValid;
-}
-
-// --- NEW DATE VALIDATION WORKFLOW ---
-
-function startDateFormatValidation(event) {
-    event.preventDefault();
-
-    // 1. Initial form validation (check required fields are mapped)
-    if (!validateForm()) {
-        showMessage('Validation Error', 'Please map all required fields first.', 'error');
-        return;
-    }
-
-    const formatSection = document.getElementById('dateFormatValidationSection');
-    const dateFieldsContainer = document.getElementById('dateFieldsContainer');
-    const startButton = document.getElementById('startValidationButton');
-    const updateButton = document.getElementById('updateTemplateButton');
-    const finalSaveButton = document.getElementById('saveTemplateFinalButton');
-    const finalUpdateButton = document.getElementById('updateTemplateFinalButton');
-    const validationError = document.getElementById('formatValidationError');
-    const validateButton = document.getElementById('validateFormatButton');
-
-    // Reset visibility and state
-    validationError.classList.add('hidden');
-    finalSaveButton.classList.add('hidden');
-    finalUpdateButton.classList.add('hidden');
-    validateButton.classList.remove('hidden');
-    dateFieldsContainer.innerHTML = '';
-    dateColumnsToValidate = []; // Clear previous list
-    
-    // Also hide any previous field-level success/error messages
-    document.querySelectorAll('[id$="_error"]').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('[id$="_success"]').forEach(el => el.classList.add('hidden'));
-
-
-    // Collect all form data (excluding file)
-    const formData = new FormData(document.getElementById('templateForm'));
-    const templateData = {};
-    for (const [key, value] of formData.entries()) {
-        // Only trim if value is a string, otherwise keep as-is
-        templateData[key] = (typeof value === 'string') ? value.trim() : value;
-    }
-    
-    // Store data for final save
-    finalTemplateData = templateData;
-
-    // 2. Identify which date fields were mapped and need validation
-    DATE_FIELDS.forEach(field => {
-        const mappedColName = templateData[field.colId]; // e.g., 'invoice_date_col' value (the header name)
-        if (mappedColName) {
-            dateColumnsToValidate.push({
-                ...field,
-                mappedColName: mappedColName,
-                // Use global sampleValues populated by extract_headers. Replace null/undefined with empty string.
-                sampleValue: sampleValues[mappedColName] || '' 
+        try {
+            const res = await fetch('/api/distributor/list-recent-emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keyword })
             });
-        }
-    });
+            const data = await res.json();
 
-    // 3. If no date fields are mapped, skip this step and proceed to final save/update
-    if (dateColumnsToValidate.length === 0) {
-        showMessage('Template Ready', 'No date fields mapped. Saving template...', 'info');
-        if (isEditing) {
-            updateTemplate();
-        } else {
-            saveTemplate();
-        }
-        return;
-    }
-
-    // 4. Generate dynamic inputs and show section
-    generateDateFieldInputs(dateColumnsToValidate, dateFieldsContainer);
-
-    // Hide initial save/update button, show validation section
-    startButton.classList.add('hidden');
-    updateButton.classList.add('hidden');
-    formatSection.classList.remove('hidden');
-    
-    // Scroll to the validation section
-    formatSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function generateDateFieldInputs(fields, containerElement) {
-    let hasAutoDetection = false;
-
-    fields.forEach(field => {
-        let existingFormat = '';
-        let isAutoDetected = false;
-
-        // Priority 1: Format from matched template (Edit Mode or Smart Copy)
-        if (window.currentTemplate && window.currentTemplate[field.formatId]) {
-            existingFormat = window.currentTemplate[field.formatId];
-        } 
-        // Priority 2: Auto-detected format from file analysis
-        else if (field.mappedColName && columnMetadata[field.mappedColName] && columnMetadata[field.mappedColName].suggested_mysql_format) {
-            existingFormat = columnMetadata[field.mappedColName].suggested_mysql_format;
-            isAutoDetected = true;
-            hasAutoDetection = true;
-        }
-
-        const html = `
-            <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-sm transition hover:shadow-md">
-                <div class="flex justify-between items-center mb-2">
-                    <label class="block text-sm font-medium text-gray-700">${field.label} Format</label>
-                    ${isAutoDetected ? '<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold border border-green-200"><i class="fas fa-magic mr-1"></i>Auto-detected</span>' : ''}
-                </div>
-                <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                    <div class="flex-grow">
-                        <p class="text-xs text-primary font-semibold mb-1">Sample Value from Row 2:</p>
-                        <p class="text-sm font-mono p-2 bg-gray-50 border rounded text-gray-600">${field.sampleValue || '— EMPTY/N/A —'}</p>
-                    </div>
-                    <div class="sm:w-1/2">
-                        <label for="${field.formatId}" class="block text-xs font-medium text-gray-700 mb-1">MySQL Format String (e.g., %d/%m/%Y):</label>
-                        <input type="text" id="${field.formatId}" name="${field.formatId}" 
-                               value="${existingFormat}" placeholder="e.g., %d/%m/%Y" 
-                               class="block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-primary focus:border-primary ${isAutoDetected ? 'bg-green-50 border-green-300' : ''}">
-                    </div>
-                </div>
-                <p id="${field.formatId}_error" class="text-xs text-red-500 mt-2 hidden flex items-center"><i class="fas fa-exclamation-circle mr-1"></i><span></span></p>
-                <p id="${field.formatId}_success" class="text-xs text-green-600 mt-2 hidden font-semibold flex items-center"><i class="fas fa-check-circle mr-1"></i>Format validated successfully!</p>
-            </div>
-        `;
-        containerElement.insertAdjacentHTML('beforeend', html);
-    });
-
-    // If we have auto-detected formats, trigger validation automatically for a seamless UX
-    if (hasAutoDetection) {
-        setTimeout(() => {
-            validateDateFormats();
-        }, 500);
-    }
-}
-
-async function validateDateFormats() {
-    const validationError = document.getElementById('formatValidationError');
-    const finalSaveButton = document.getElementById('saveTemplateFinalButton');
-    const finalUpdateButton = document.getElementById('updateTemplateFinalButton');
-    const validateButton = document.getElementById('validateFormatButton');
-    
-    // Reset state
-    validationError.classList.add('hidden');
-    finalSaveButton.classList.add('hidden');
-    finalUpdateButton.classList.add('hidden');
-    document.querySelectorAll('[id$="_error"]').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('[id$="_success"]').forEach(el => el.classList.add('hidden'));
-
-    // 1. Client-side check for empty format strings
-    let formats = {};
-    let clientError = false;
-    dateColumnsToValidate.forEach(field => {
-        const formatInput = document.getElementById(field.formatId);
-        formats[field.formatId] = formatInput ? formatInput.value.trim() : '';
-        
-        // Update finalTemplateData immediately with user input
-        finalTemplateData[field.formatId] = formats[field.formatId];
-
-        if (formats[field.formatId] === '') {
-            const errorElement = document.getElementById(`${field.formatId}_error`);
-            errorElement.textContent = `${field.label} format cannot be empty.`;
-            errorElement.classList.remove('hidden');
-            clientError = true;
-        }
-    });
-
-    if (clientError) {
-        validationError.textContent = 'Please fill in all required date formats.';
-        validationError.classList.remove('hidden');
-        return;
-    }
-
-    validateButton.disabled = true;
-    validateButton.textContent = 'Validating...';
-
-    // 2. Prepare payload for backend validation
-    const validationPayload = {
-        formats: formats, // e.g., { invoice_date_format: '%d/%m/%Y', ... }
-        dateColumns: dateColumnsToValidate.map(f => ({
-            colId: f.colId,
-            formatId: f.formatId,
-            sampleValue: f.sampleValue
-        }))
-    };
-    
-    try {
-        const response = await fetch('/api/template/validate-date-formats', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(validationPayload)
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showMessage('Validation Success', 'All date formats are valid! Click "Confirm" to finalize.', 'success');
-            validateButton.classList.add('hidden');
-            
-            if (isEditing) {
-                finalUpdateButton.classList.remove('hidden');
+            candidatesList.innerHTML = '';
+            if (data.success && data.candidates.length > 0) {
+                data.candidates.forEach(email => {
+                    const el = document.createElement('div');
+                    el.className = 'p-3 bg-white border border-gray-200 rounded cursor-pointer hover:bg-green-50 hover:border-green-300 transition flex justify-between items-center';
+                    el.onclick = () => selectCandidate(email.id);
+                    el.innerHTML = `
+                        <div class="truncate">
+                            <p class="font-bold text-gray-800 text-sm truncate">${email.subject || '(No Subject)'}</p>
+                            <p class="text-xs text-gray-500">${email.sender} &bull; ${dayjs(email.date).format('DD MMM YYYY')}</p>
+                        </div>
+                        <button class="text-xs bg-primary text-white px-3 py-1 rounded">Select</button>
+                    `;
+                    candidatesList.appendChild(el);
+                });
             } else {
-                finalSaveButton.classList.remove('hidden');
+                candidatesList.innerHTML = '<p class="text-center text-gray-500 text-sm py-2">No relevant emails found.</p>';
             }
-            
-            // Show success messages for each field
-            result.validated_fields.forEach(fieldId => {
-                document.getElementById(`${fieldId}_success`).classList.remove('hidden');
+        } catch (err) {
+            console.error(err);
+            candidatesList.innerHTML = '<p class="text-center text-red-500 text-sm py-2">Search failed.</p>';
+        } finally {
+            setLoading(searchEmailsBtn, false, 'Find Emails');
+        }
+    });
+
+    // Trigger metadata fetch with specific UID
+    function selectCandidate(uid) {
+        // Clear list to clean up UI
+        candidatesList.classList.add('hidden');
+        fetchMetadata(null, uid);
+    }
+
+    // Updated fetchMetadata signature
+    async function fetchMetadata(configId = null, directUid = null) {
+        // If directUid is provided, we simulate the "URL" payload logic or handle it in backend
+        // Actually, let's update backend to accept 'uid' in fetch-email-metadata, OR just mock the URL
+        
+        // Wait, backend fetch-email-metadata primarily parses URL. 
+        // Let's modify the payload we send.
+        
+        const payload = configId ? { configId } : {};
+        if (directUid) {
+            // We need a way to tell backend "Use this UID directly"
+            // The existing backend logic checks 'emailUrl'. 
+            // If we send emailUrl as just the UID, the backend logic:
+            // "threadId = lastPart.split... OR searchCriteria.push(['SUBJECT', emailUrl])"
+            // This is brittle.
+            // Let's pass a NEW property 'directUid' to backend.
+            // I need to update backend 'fetch-email-metadata' to handle 'directUid'.
+            payload.directUid = directUid;
+        } else if (!configId) {
+             // Fallback to keyword if needed, but we rely on selection now
+             // If user didn't select anything? 
+             return alert("Please search and select an email first.");
+        }
+        
+        // Use a generic loading button reference or the search button
+        const btn = configId ? fetchBtn : searchEmailsBtn; 
+        // Note: fetchBtn doesn't exist in HTML anymore, it was removed.
+        
+        setLoading(btn, true, 'Fetching Data...');
+
+        try {
+            const res = await fetch('/api/distributor/fetch-email-metadata', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
 
-        } else if (result.error_field) {
-            // Specific field error
-            const errorElement = document.getElementById(`${result.error_field}_error`);
-            errorElement.textContent = result.message || 'Invalid format for the sample value.';
-            errorElement.classList.remove('hidden');
-            validationError.textContent = 'Date format validation failed for one or more fields. Please correct and re-validate.';
-            validationError.classList.remove('hidden');
-            
-        } else {
-            // General error
-            validationError.textContent = result.error || 'Date format validation failed due to a server error.';
-            validationError.classList.remove('hidden');
-        }
+            const data = await res.json();
 
-    } catch (error) {
-        console.error('Validation fetch error:', error);
-        validationError.textContent = 'Network error during validation. Check console.';
-        validationError.classList.remove('hidden');
-    } finally {
-        validateButton.disabled = false;
-        validateButton.textContent = 'Validate Date Format';
-        // Restore button visibility logic handled in success block above
-        if (finalSaveButton.classList.contains('hidden') && finalUpdateButton.classList.contains('hidden')) {
-             validateButton.classList.remove('hidden');
-        }
-    }
-}
-
-// Final template saving function (called after successful date validation)
-async function saveTemplate() {
-    processTemplateSave('/api/template/save-template', 'POST');
-}
-
-async function updateTemplate() {
-    const templateId = document.getElementById('editing_template_id').value;
-    processTemplateSave(`/api/template/update-template/${templateId}`, 'PUT');
-}
-
-async function processTemplateSave(url, method) {
-    // Clean up finalTemplateData - ensure all string values are trimmed
-    Object.keys(finalTemplateData).forEach(key => {
-        if (typeof finalTemplateData[key] === 'string') {
-            finalTemplateData[key] = finalTemplateData[key].trim();
-        }
-    });
-
-    // Ensure finalTemplateData is populated
-    if (Object.keys(finalTemplateData).length === 0) {
-        showMessage('Error', 'Template data missing. Please map headers and re-run validation.', 'error');
-        return;
-    }
-
-    const startButton = document.getElementById('startValidationButton');
-    const updateButton = document.getElementById('updateTemplateButton');
-    const finalSaveButton = document.getElementById('saveTemplateFinalButton');
-    const finalUpdateButton = document.getElementById('updateTemplateFinalButton');
-    const validationSection = document.getElementById('dateFormatValidationSection');
-    const validationError = document.getElementById('formatValidationError');
-
-    // Disable active button
-    const activeBtn = method === 'PUT' ? finalUpdateButton : finalSaveButton;
-    activeBtn.disabled = true;
-    activeBtn.textContent = 'Saving...';
-    validationError.classList.add('hidden');
-
-    try {
-        const response = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(finalTemplateData)
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showMessage('Success', result.message || 'Template saved successfully!', 'success');
-            
-            // Cleanup UI
-            resetForm(); 
-            fetchSavedTemplates(); // Refresh the list
-
-        } else {
-            validationError.textContent = result.error || 'Failed to save template. Check server logs.';
-            validationError.classList.remove('hidden');
-            showMessage('Save Error', validationError.textContent, 'error');
-        }
-
-    } catch (error) {
-        console.error('Save fetch error:', error);
-        showMessage('Network Error', 'A network error occurred while saving the template.', 'error');
-    } finally {
-        activeBtn.disabled = false;
-        activeBtn.textContent = method === 'PUT' ? 'Confirm & Update Template' : 'Confirm & Save Template';
-    }
-}
-
-
-// --- Reset and Preview ---
-
-// Resets the form and hides dynamic sections
-function resetForm() {
-    document.getElementById('templateForm').reset();
-    
-    globalHeaders = [];
-    sampleValues = {};
-    finalTemplateData = {};
-    dateColumnsToValidate = [];
-    isEditing = false;
-    window.currentTemplate = null;
-    
-    // Hide sections
-    document.getElementById('mappingSection').classList.add('hidden');
-    document.getElementById('templateNamingSection').classList.add('hidden');
-    document.getElementById('initialActionButtons').classList.add('hidden');
-    document.getElementById('dateFormatValidationSection').classList.add('hidden');
-    document.getElementById('editingBadge').classList.add('hidden');
-    
-    // Reset Buttons
-    document.getElementById('startValidationButton').classList.remove('hidden');
-    document.getElementById('updateTemplateButton').classList.add('hidden');
-    document.getElementById('saveTemplateFinalButton').classList.add('hidden');
-    document.getElementById('updateTemplateFinalButton').classList.add('hidden');
-    document.getElementById('validateFormatButton').classList.remove('hidden');
-    
-    // Clear dynamic content
-    document.getElementById('templateNamePreview').textContent = '';
-    document.getElementById('mappingError').classList.add('hidden');
-    document.getElementById('formatValidationError').classList.add('hidden');
-
-    // Clear and reset dropdowns
-    renderMappingSection();
-    
-    // Reset the initial extract button's error display
-    document.getElementById('templateFileError').classList.add('hidden');
-    
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    showMessage('Form Reset', 'The form has been cleared and reset.', 'info');
-}
-
-// Optional: Add template name preview functionality
-function addTemplateNamePreview() {
-    const vendorDetailDropdown = document.getElementById('vendor_detail_col');
-    const templateNameInput = document.getElementById('template_name');
-
-    // Add listeners to update the template name input based on the Vendor column value
-    const updatePreview = () => {
-        if (isEditing) return; // Don't auto-update name if editing
-
-        const vendorHeaderName = vendorDetailDropdown.value.trim();
-        let previewName = 'Unnamed Template';
-        
-        if (vendorHeaderName && sampleValues[vendorHeaderName]) {
-            // Use the sample value from the second row for a better default name
-            previewName = `${sampleValues[vendorHeaderName]} Template`;
-        } else if (vendorHeaderName) {
-            previewName = `${vendorHeaderName} Template`;
-        }
-        
-        // Set the default template name suggestion
-        templateNameInput.value = previewName;
-        
-        // Update a preview element
-        const previewElement = document.getElementById('templateNamePreview');
-        if (previewElement) {
-            previewElement.textContent = `Suggested name based on mapped vendor value: ${previewName}`;
-        }
-    };
-
-    if (vendorDetailDropdown) {
-        vendorDetailDropdown.addEventListener('change', updatePreview);
-    }
-    
-    // Also update on file extraction success
-    window.updateTemplateNamePreview = updatePreview;
-}
-
-function updateTemplateNamePreview() {
-    if (isEditing) return;
-
-    const vendorHeaderName = document.getElementById('vendor_detail_col').value.trim();
-    const templateNameInput = document.getElementById('template_name');
-    let previewName = 'Unnamed Template';
-    
-    if (vendorHeaderName && sampleValues[vendorHeaderName]) {
-        previewName = `${sampleValues[vendorHeaderName]} Template`;
-    } else if (vendorHeaderName) {
-        previewName = `${vendorHeaderName} Template`;
-    }
-    
-    // Set the default template name suggestion
-    templateNameInput.value = previewName;
-    
-    // Update a preview element
-    const previewElement = document.getElementById('templateNamePreview');
-    if (previewElement) {
-        previewElement.textContent = `Suggested name based on mapped vendor value: ${previewName}`;
-    }
-}
-
-// --- Fetch and Display Saved Templates ---
-
-async function fetchSavedTemplates() {
-    const container = document.getElementById('savedTemplatesList');
-    container.innerHTML = '<p class="text-gray-500 text-center py-4">Loading templates...</p>';
-
-    try {
-        const response = await fetch('/api/template/get-templates');
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            renderSavedTemplates(result.templates);
-        } else {
-            container.innerHTML = '<p class="text-red-500 text-center py-4">Failed to load templates.</p>';
-        }
-    } catch (error) {
-        console.error('Fetch templates error:', error);
-        container.innerHTML = '<p class="text-red-500 text-center py-4">Network error loading templates.</p>';
-    }
-}
-
-function renderSavedTemplates(templates) {
-    const container = document.getElementById('savedTemplatesList');
-    
-    if (!templates || templates.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-center py-4">No saved templates found.</p>';
-        return;
-    }
-
-    container.innerHTML = ''; // Clear loading
-
-    templates.forEach(template => {
-        const item = document.createElement('div');
-        item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-md transition';
-        
-        item.innerHTML = `
-            <div>
-                <h3 class="font-bold text-gray-800 text-lg">${template.template_name}</h3>
-                <p class="text-xs text-gray-500">ID: ${template.id} | Vendor Col: ${template.vendor_detail_col}</p>
-            </div>
-            <div class="mt-3 sm:mt-0 flex space-x-2">
-                <button class="edit-btn bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1 rounded text-sm font-medium transition" data-id="${template.id}">
-                    <i class="fas fa-edit mr-1"></i> Edit
-                </button>
-                <button class="delete-btn bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded text-sm font-medium transition" data-id="${template.id}">
-                    <i class="fas fa-trash-alt mr-1"></i> Delete
-                </button>
-            </div>
-        `;
-        
-        container.appendChild(item);
-    });
-
-    // Add event listeners
-    document.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => deleteTemplate(e.target.closest('button').dataset.id));
-    });
-
-    document.querySelectorAll('.edit-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => loadTemplateForEdit(e.target.closest('button').dataset.id));
-    });
-}
-
-async function deleteTemplate(id) {
-    if (!confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/template/delete-template/${id}`, {
-            method: 'DELETE'
-        });
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showMessage('Deleted', 'Template deleted successfully.', 'success');
-            fetchSavedTemplates();
-            // If deleting the currently editing template, reset form
-            if (isEditing && document.getElementById('editing_template_id').value == id) {
-                resetForm();
+            if (res.ok) {
+                populateMetadata(data.metadata);
+                document.getElementById('metadataSection').classList.remove('hidden');
+                setActiveStep(2);
+                document.getElementById('metadataSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                alert('Error: ' + data.error);
             }
-        } else {
-            showMessage('Error', result.error || 'Failed to delete template.', 'error');
+        } catch (err) {
+            alert('Network error fetching email.');
+            console.error(err);
+        } finally {
+            setLoading(btn, false, configId ? 'Re-scan Email' : 'Find Emails');
         }
-    } catch (error) {
-        console.error('Delete error:', error);
-        showMessage('Error', 'Network error while deleting template.', 'error');
     }
-}
 
-async function loadTemplateForEdit(id) {
-    try {
-        const response = await fetch(`/api/template/get-template/${id}`);
-        const result = await response.json();
+    function populateMetadata(meta) {
+        document.getElementById('distributorName').value = meta.distributorName;
+        document.getElementById('emailSender').value = meta.senderEmail;
+        document.getElementById('subjectKeyword').value = meta.subjectKeyword;
+        document.getElementById('fileType').value = meta.fileType;
+        document.getElementById('emailUid').value = meta.id;
+        document.getElementById('fileName').value = meta.fileName;
+        
+        // Render Smart Extraction Viewers
+        viewerSubject.textContent = meta.subject || '(No Subject)';
+        viewerBody.textContent = meta.bodyText || '(No Text Content)';
+        
+        // Load Saved Regex Config if available
+        if (meta.invoiceNoRegex || meta.invoiceDateRegex) {
+            extractionConfig.invoice = {
+                regex: meta.invoiceNoRegex,
+                source: meta.invoiceNoSource,
+                sample: meta.invoiceNoRegex ? '(Saved Pattern)' : null
+            };
+            extractionConfig.date = {
+                regex: meta.invoiceDateRegex,
+                source: meta.invoiceDateSource,
+                sample: meta.invoiceDateRegex ? '(Saved Pattern)' : null
+            };
+            updateExtractionPreview();
+        }
+    }
 
-        if (response.ok && result.success) {
-            const template = result.template;
-            
-            // Set edit mode
-            isEditing = true;
-            window.currentTemplate = template; // Store for format retrieval
-            document.getElementById('editing_template_id').value = template.id;
-            document.getElementById('editingBadge').classList.remove('hidden');
-            
-            // Populate basic fields
-            document.getElementById('template_name').value = template.template_name;
-            
-            // Show necessary sections (even without file upload)
-            document.getElementById('templateNamingSection').classList.remove('hidden');
-            document.getElementById('mappingSection').classList.remove('hidden');
-            document.getElementById('initialActionButtons').classList.remove('hidden');
-            document.getElementById('dateFormatValidationSection').classList.add('hidden'); // Hide until validation
-            
-            // Hide extract button error
-            document.getElementById('templateFileError').classList.add('hidden');
+    // --- Smart Extraction Logic ---
+    
+    function resetSelectionButtons() {
+        btnSelectInvoice.classList.remove('bg-primary', 'text-white', 'border-primary');
+        btnSelectDate.classList.remove('bg-primary', 'text-white', 'border-primary');
+        btnSelectInvoice.innerHTML = '<i class="fas fa-file-invoice mr-1"></i> Select Invoice No';
+        btnSelectDate.innerHTML = '<i class="fas fa-calendar-alt mr-1"></i> Select Date';
+        currentSelectionMode = null;
+    }
 
-            // Switch buttons
-            document.getElementById('startValidationButton').classList.add('hidden');
-            document.getElementById('updateTemplateButton').classList.remove('hidden');
+    function toggleSelectionMode(mode, btn) {
+        if (currentSelectionMode === mode) {
+            resetSelectionButtons();
+            return;
+        }
+        resetSelectionButtons();
+        currentSelectionMode = mode;
+        btn.classList.add('bg-primary', 'text-white', 'border-primary');
+        btn.innerHTML = `<i class="fas fa-mouse-pointer mr-1"></i> Select ${mode === 'invoice' ? 'Invoice' : 'Date'} Text`;
+    }
 
-            // Populate dropdowns with *current values* as options (since we don't have the file anymore)
-            // Ideally, we'd have the headers, but we don't store raw headers separate from mapping.
-            // We'll create options based on the mapped values so they show up.
-            
-            // Collect all unique mapped values
-            const mappedValues = new Set();
-            REQUIRED_FIELDS.forEach(field => {
-                if (template[field.id]) mappedValues.add(template[field.id]);
+    btnSelectInvoice.addEventListener('click', () => toggleSelectionMode('invoice', btnSelectInvoice));
+    btnSelectDate.addEventListener('click', () => toggleSelectionMode('date', btnSelectDate));
+
+    function handleTextSelection(e) {
+        if (!currentSelectionMode) return; 
+        
+        const selection = window.getSelection();
+        const text = selection.toString().trim();
+        if (!text) return;
+
+        // Determine Source
+        let source = null;
+        if (viewerSubject.contains(selection.anchorNode)) source = 'subject';
+        else if (viewerBody.contains(selection.anchorNode)) source = 'body';
+        else return; // Selected outside
+
+        // Calculate Regex
+        const fullText = source === 'subject' ? viewerSubject.textContent : viewerBody.textContent;
+        const escapedText = text.replace(/[.*+?^${}()|[\\]/g, '\\$&'); // Escape regex chars
+        
+        // Find preceding context (anchor)
+        const index = fullText.indexOf(text);
+        let prefix = "";
+        if (index > 0) {
+            // Get up to 15 chars before
+            const start = Math.max(0, index - 15);
+            const rawPrefix = fullText.substring(start, index);
+            // Try to find a stable anchor like "Invoice:" or "Date:" or just whitespace
+            const match = rawPrefix.match(/([a-zA-Z]+[:\s-]*)\s*$/);
+            if (match) {
+                prefix = match[1].trim(); 
+            }
+        }
+
+        // Generate Regex
+        // Pattern: (?<=Prefix[\s]*)(CapturedGroup)
+        // If no prefix found, just matches the text format loosely
+        
+        let regexPattern = '';
+        if (prefix) {
+             regexPattern = `(?<=${prefix.replace(/[.*+?^${}()|[\\]/g, '\\$&')}\s*)([^\\s]+)`;
+        } else {
+            // Fallback: Try to match the format of the selected text
+            if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(text)) regexPattern = `(\d{2}[-/]\d{2}[-/]\d{4})`; // Date
+            else if (/^[A-Z0-9-]+$/.test(text)) regexPattern = `(${escapedText})`; // Exact match fallback or simple alphanumeric
+            else regexPattern = `(${escapedText})`;
+        }
+        
+        // Save Config
+        extractionConfig[currentSelectionMode] = {
+            regex: regexPattern,
+            source: source,
+            sample: text
+        };
+
+        // Update UI
+        updateExtractionPreview();
+        resetSelectionButtons();
+        window.getSelection().removeAllRanges();
+    }
+
+    viewerSubject.addEventListener('mouseup', handleTextSelection);
+    viewerBody.addEventListener('mouseup', handleTextSelection);
+
+    function updateExtractionPreview() {
+        extractionPreview.classList.remove('hidden');
+        
+        const inv = extractionConfig.invoice;
+        if (inv.sample) {
+            document.getElementById('previewInvoice').textContent = inv.sample;
+            document.getElementById('regexInvoice').textContent = `Src: ${inv.source} | Rx: ${inv.regex}`;
+        }
+        
+        const dat = extractionConfig.date;
+        if (dat.sample) {
+            document.getElementById('previewDate').textContent = dat.sample;
+            document.getElementById('regexDate').textContent = `Src: ${dat.source} | Rx: ${dat.regex}`;
+        }
+    }
+
+
+    // --- Step 2: Analyze & Map ---
+    analyzeBtn.addEventListener('click', async () => {
+        const uid = document.getElementById('emailUid').value;
+        const fileName = document.getElementById('fileName').value;
+        if (!uid) return alert('No email loaded.');
+
+        setLoading(analyzeBtn, true, 'Analyzing...');
+
+        try {
+            const res = await fetch('/api/distributor/analyze-file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid, fileName })
             });
-            
-            globalHeaders = Array.from(mappedValues);
-            
-            // Set selected values on hidden inputs first
-            REQUIRED_FIELDS.forEach(field => {
-                const hiddenInput = document.getElementById(field.id);
-                if (hiddenInput && template[field.id]) {
-                    hiddenInput.value = template[field.id];
+
+            const data = await res.json();
+            if (res.ok) {
+                renderMappingTable(data.mapping, data.fileHeaders);
+                document.getElementById('mappingSection').classList.remove('hidden');
+                setActiveStep(3);
+                document.getElementById('mappingSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                alert('Analysis Failed: ' + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error analyzing file.');
+        } finally {
+            setLoading(analyzeBtn, false, 'Analyze File');
+        }
+    });
+
+    function renderMappingTable(mapping, fileHeaders) {
+        const tbody = document.getElementById('mappingTableBody');
+        const datalist = document.getElementById('fileHeadersList');
+        
+        tbody.innerHTML = '';
+        datalist.innerHTML = '';
+
+        fileHeaders.forEach(header => {
+            const option = document.createElement('option');
+            option.value = header;
+            datalist.appendChild(option);
+        });
+
+        mapping.forEach((row) => {
+            const tr = document.createElement('tr');
+            let rowClass = 'border-l-4 ';
+            let iconClass = '';
+
+            if (row.suggestedHeader) {
+                if (row.confidence === 'high') {
+                    rowClass += 'confidence-high';
+                    iconClass = 'fa-check-circle text-green-500';
+                } else if (row.confidence === 'moderate') {
+                    rowClass += 'confidence-moderate';
+                    iconClass = 'fa-exclamation-circle text-yellow-500';
+                } else {
+                    rowClass += 'confidence-poor';
+                    iconClass = 'fa-question-circle text-gray-400';
                 }
+            } else {
+                rowClass += 'bg-white';
+                iconClass = 'fa-times-circle text-red-300';
+            }
+
+            tr.className = rowClass;
+            tr.innerHTML = `
+                <td class="px-4 py-3">
+                    <input type="text" list="fileHeadersList" 
+                           class="map-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-2 text-sm"
+                           value="${row.suggestedHeader || ''}"
+                           placeholder="Search..."
+                           data-system-column="${row.systemColumn}">
+                </td>
+                <td class="px-4 py-3 text-left">
+                    <span class="font-bold text-gray-800">${row.systemLabel}</span>
+                </td>
+                <td class="px-4 py-3 text-center text-lg"><i class="fas ${iconClass}"></i></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // --- Step 3: Save ---
+    saveConfigBtn.addEventListener('click', async () => {
+        const mapping = [];
+        document.querySelectorAll('.map-input').forEach(input => {
+            const fileHeader = input.value.trim();
+            const systemColumn = input.dataset.systemColumn;
+            if (fileHeader) mapping.push({ systemColumn, fileHeader });
+        });
+
+        const payload = {
+            distributorName: document.getElementById('distributorName').value,
+            emailSender: document.getElementById('emailSender').value,
+            subjectKeyword: document.getElementById('subjectKeyword').value,
+            fileType: document.getElementById('fileType').value,
+            gmailThreadId: document.getElementById('emailUid').value, // Use the current email UID/ThreadID
+            mapping: mapping,
+            // New Smart Extraction Data
+            invoiceNoRegex: extractionConfig.invoice.regex,
+            invoiceNoSource: extractionConfig.invoice.source,
+            invoiceDateRegex: extractionConfig.date.regex,
+            invoiceDateSource: extractionConfig.date.source
+        };
+
+        if (mapping.length === 0) return alert('Please map at least one column.');
+
+        setLoading(saveConfigBtn, true, 'Saving...');
+
+        try {
+            const res = await fetch('/api/distributor/save-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
 
-            // Update dropdowns (this will also sync searchInputs)
-            updateDropdowns(globalHeaders);
-
-            // Scroll to top
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            
-            showMessage('Edit Mode', `Editing template: ${template.template_name}. NOTE: Since the original file is not stored, dropdowns only show previously mapped columns. Upload a file to see all columns.`, 'info');
-
-        } else {
-            showMessage('Error', 'Failed to load template details.', 'error');
+            if (res.ok) {
+                alert('Configuration Saved Successfully!');
+                switchTab('manage'); // Go to list view
+            } else {
+                const d = await res.json();
+                alert('Save Failed: ' + d.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error saving configuration.');
+        } finally {
+            setLoading(saveConfigBtn, false, 'Save Configuration');
         }
-    } catch (error) {
-        console.error('Load edit error:', error);
-        showMessage('Error', 'Network error loading template.', 'error');
+    });
+
+    // --- Manage View ---
+    refreshListBtn.addEventListener('click', loadConfigs);
+
+    async function loadConfigs() {
+        const tbody = document.getElementById('configListBody');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading...</td></tr>';
+
+        try {
+            const res = await fetch('/api/distributor/list-configs');
+            const data = await res.json();
+
+            tbody.innerHTML = '';
+            if (data.configs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No configurations found.</td></tr>';
+                return;
+            }
+
+            data.configs.forEach(config => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900">${config.distributor_name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-gray-500 text-sm">${config.email_sender}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        ${config.invoice_no_regex 
+                            ? '<span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">Smart Regex</span>' 
+                            : ''}
+                        ${config.gmail_thread_id 
+                            ? '<span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Thread Linked</span>' 
+                            : '<span class="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Manual</span>'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button class="text-indigo-600 hover:text-indigo-900 mr-3 edit-btn" data-id="${config.id}">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button class="text-red-600 hover:text-red-900 delete-btn" data-id="${config.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Attach Listeners
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', () => editConfig(btn.dataset.id));
+            });
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => deleteConfig(btn.dataset.id));
+            });
+
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Failed to load.</td></tr>';
+        }
     }
-}
+
+    function editConfig(id) {
+        document.getElementById('editingConfigId').value = id;
+        switchTab('new');
+        fetchMetadata(id); // Smart Re-fetch using config ID
+    }
+
+    async function deleteConfig(id) {
+        if (!confirm('Are you sure you want to delete this configuration?')) return;
+        try {
+            const res = await fetch(`/api/distributor/delete-config/${id}`, { method: 'DELETE' });
+            if (res.ok) loadConfigs();
+            else alert('Delete failed.');
+        } catch (e) { alert('Error deleting.'); }
+    }
+
+    function setLoading(btn, isLoading, text) {
+        if (isLoading) {
+            btn.disabled = true;
+            btn.dataset.originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${text}`;
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = btn.dataset.originalText || text;
+        }
+    }
+});

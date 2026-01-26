@@ -1,6 +1,14 @@
 // server/app.js
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+const fs = require('fs');
+const dotenv = require('dotenv');
+
+// Load .env from current dir or parent dir
+const envPath = fs.existsSync(path.join(__dirname, '.env')) 
+    ? path.join(__dirname, '.env') 
+    : path.join(__dirname, '..', '.env');
+dotenv.config({ path: envPath });
+
 const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
@@ -16,6 +24,7 @@ const analyticsRoutes = require('./routes/analyticsRoutes'); // NEW: Analytics r
 const customerRoutes = require('./routes/customerRoutes'); // NEW: Customer routes
 const userRoutes = require('./routes/userRoutes'); // NEW: User management routes
 const telegramRoutes = require('./routes/telegramRoutes'); // NEW: Telegram dashboard routes
+const distributorRoutes = require('./routes/distributorRoutes'); // NEW: Distributor Config routes
 const { launchBot } = require('./services/telegramService'); // NEW: Initialize Telegram Bot Service
 launchBot();
 
@@ -39,6 +48,7 @@ app.use(session({
 }));
 
 // mount auth routes at /auth (DO NOT PROTECT THIS ROUTE)
+console.log('Mounting Auth Routes...');
 app.use('/auth', authRoutes);
 
 // serve login page explicitly at / (DO NOT PROTECT THIS ROUTE)
@@ -86,6 +96,11 @@ protectedRouter.get('/TelegramDashboard.html', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'html', 'TelegramDashboard.html'));
 });
 
+// NEW: Distributor Config Page
+protectedRouter.get('/distributor-config.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'html', 'distributorConfig.html'));
+});
+
 
 // Use the protected router
 app.use(protectedRouter);
@@ -100,6 +115,7 @@ app.use('/api/analytics', analyticsRoutes); // NEW: Analytics API
 app.use('/api/customers', customerRoutes); // NEW: Customer API
 app.use('/api/users', userRoutes); // NEW: User API
 app.use('/api/telegram', telegramRoutes); // NEW: Telegram API
+app.use('/api/distributor', distributorRoutes); // NEW: Distributor API
 
 // simple error handler
 app.use((err, req, res, next) => {

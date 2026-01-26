@@ -10,16 +10,16 @@
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Custom Tailwind Configuration: Using the provided color palette -->
+    <!-- Custom Tailwind Configuration -->
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        'primary': '#00712D',      /* Dark Green */
-                        'secondary': '#D5ED9F',    /* Light Pastel Green/Yellow */
-                        'tertiary': '#FFFBE6',     /* Very Light Cream/Yellow (Background) */
-                        'quarterly': '#FF9100',    /* Bright Orange (Accent) */
+                        'primary': '#00712D',
+                        'secondary': '#D5ED9F',
+                        'tertiary': '#FFFBE6',
+                        'quarterly': '#FF9100',
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
@@ -30,18 +30,14 @@
     </script>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
-    <!-- Font Awesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-
-    <!-- Inline Styles for Custom Components (Spinner and Custom Buttons) -->
     <link rel="stylesheet" href="/css/drugDispensing.css">
 </head>
 
-<body class="bg-tertiary font-sans min-h-screen p-4 sm:p-6 lg:p-8">
+<body class="bg-tertiary font-sans min-h-screen p-4 sm:p-6 lg:p-8 pb-24">
 
     <!-- Global Message/Modal Container -->
-    <div id="message-modal"
-        class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div id="message-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
             <h3 id="modal-title" class="text-xl font-bold mb-3 text-primary">Notification</h3>
             <p id="modal-body" class="text-gray-700"></p>
@@ -50,405 +46,257 @@
         </div>
     </div>
 
-    <!-- Loading/Processing Overlay -->
-    <div id="loading-overlay"
-        class="hidden fixed inset-0 bg-tertiary bg-opacity-80 flex flex-col items-center justify-center z-50">
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-tertiary bg-opacity-80 flex flex-col items-center justify-center z-50">
         <div class="spinner mb-4"></div>
-        <p class="text-primary font-semibold text-lg">Processing Transaction...</p>
-        <p class="text-gray-600 text-sm">Please wait while the bill is being finalized.</p>
+        <p class="text-primary font-semibold text-lg">Processing...</p>
     </div>
 
-    <!-- Barcode Scanner Modal -->
-    <div id="barcodeModal" class="modal hidden">
-        <div class="modal-content max-w-2xl">
-            <div class="modal-header">
-                <h3 class="text-xl font-bold text-primary">Scan Barcode</h3>
-                <button id="closeBarcodeModal" class="close-modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="scanner-container">
-                    <div id="scannerPlaceholder" class="scanner-placeholder">
-                        <i class="fas fa-camera text-4xl mb-4 text-gray-400"></i>
-                        <p class="text-gray-600">Click "Start Scanner" to begin</p>
-                    </div>
-                    <video id="barcodeVideo" class="hidden w-full h-64 object-cover rounded-lg bg-black"></video>
-                    <canvas id="barcodeCanvas" class="hidden"></canvas>
-                </div>
-
-                <div class="scanner-controls mt-4 flex gap-2">
-                    <button id="startScanner" class="btn-primary-custom py-2 px-4 rounded-lg">
-                        <i class="fas fa-play mr-2"></i> Start Scanner
-                    </button>
-                    <button id="stopScanner" class="btn-secondary-custom py-2 px-4 rounded-lg hidden">
-                        <i class="fas fa-stop mr-2"></i> Stop Scanner
-                    </button>
-                    <button id="switchCamera" class="btn-outline-custom py-2 px-4 rounded-lg hidden">
-                        <i class="fas fa-sync mr-2"></i> Switch Camera
-                    </button>
-                </div>
-
-                <div class="manual-barcode mt-6 p-4 bg-gray-50 rounded-lg">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Or enter barcode manually:</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="manualBarcode" placeholder="Enter barcode number"
-                            class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                        <button id="searchBarcode" class="btn-primary-custom py-3 px-6 rounded-lg">
-                            <i class="fas fa-search mr-2"></i> Search
-                        </button>
-                    </div>
-                </div>
-
-                <div id="scannerStatus" class="mt-4 text-sm text-gray-600"></div>
-            </div>
-            <div class="modal-footer">
-                <button id="cancelBarcode" class="btn-secondary py-3 px-6 rounded-lg">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Content Container -->
+    <!-- Main Content -->
     <div class="w-full max-w-7xl mx-auto bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-2xl space-y-6">
 
-        <!-- Header -->
-        <header class="flex flex-col sm:flex-row items-center justify-between border-b pb-4 mb-4">
-            <div class="flex items-center">
-                <!-- Assuming logo path is correct; placeholder text used if image fails -->
-                <img src="/img/KiranCareWellnessLogo.svg"
-                    onerror="this.onerror=null; this.src='https://placehold.co/40x40/00712D/ffffff?text=KR';"
-                    alt="KiranCareWellness Logo" class="h-10 w-auto mr-4">
-                <h1 class="text-2xl sm:text-3xl font-bold text-primary">Medicine Dispensing</h1>
+        <!-- Header with Toggle -->
+        <header class="flex flex-col sm:flex-row items-center justify-between border-b pb-4 mb-4 gap-4">
+            <div class="flex items-center w-full sm:w-auto justify-between sm:justify-start">
+                <div class="flex items-center">
+                    <img src="/img/KiranCareWellnessLogo.svg"
+                        onerror="this.onerror=null; this.src='https://placehold.co/40x40/00712D/ffffff?text=KR';"
+                        alt="Logo" class="h-10 w-auto mr-4">
+                    <h1 class="text-xl sm:text-2xl font-bold text-primary">Dispensing</h1>
+                    <span id="user-id" class="ml-4 text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full hidden sm:inline-block">Loading...</span>
+                </div>
             </div>
-            <div id="current-user-info" class="text-sm text-gray-500 mt-2 sm:mt-0">
-                <span id="user-id">User ID: Loading...</span>
+
+            <!-- Mode Toggle -->
+            <div class="flex items-center bg-gray-100 p-1 rounded-lg">
+                <button id="modeQuick" class="px-4 py-2 rounded-md text-sm font-semibold transition-all bg-white shadow text-primary">Quick</button>
+                <button id="modeStandard" class="px-4 py-2 rounded-md text-sm font-semibold text-gray-500 transition-all hover:text-primary">Standard</button>
             </div>
         </header>
 
-        <!-- Main Dispensing Layout: Responsive Grid -->
+        <!-- Main Grid -->
         <main class="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8">
 
-            <!-- LEFT COLUMN (Customer Info & Search - 2/5 width on desktop) -->
-            <div class="lg:col-span-2 space-y-6">
-
-                <!-- 1. Customer Information Section -->
-                <section class="p-5 bg-gray-50 rounded-xl shadow-lg border border-gray-200">
+            <!-- LEFT: Customer & Search -->
+            <div class="lg:col-span-2 space-y-6 flex flex-col">
+                
+                <!-- Customer Section (Hidden by default for Quick Mode) -->
+                <section id="customerSection" class="p-5 bg-gray-50 rounded-xl shadow-lg border border-gray-200 transition-all duration-300 hidden">
                     <h2 class="text-lg font-semibold text-primary mb-4 flex items-center">
-                        <i class="fas fa-user-circle mr-2 text-quarterly"></i> Customer Information
+                        <i class="fas fa-user-circle mr-2 text-quarterly"></i> Customer Info
                     </h2>
                     <form id="customerForm" class="space-y-4">
                         <div class="form-group">
-                            <label for="customerMobile" class="block text-sm font-medium text-gray-700 mb-1">Mobile
-                                Number (WhatsApp) *</label>
-                            <div class="flex relative items-center">
-                                <input type="tel" id="customerMobile" name="customerMobile"
-                                    class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary pr-20"
-                                    placeholder="Enter 10-digit mobile number" pattern="[0-9]{10}">
-                                <span
-                                    class="absolute right-0 top-0 bottom-0 flex items-center px-3 text-xs font-semibold text-white bg-green-500 rounded-r-lg">
-                                    WhatsApp
-                                </span>
-                            </div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Mobile (WhatsApp)</label>
+                            <input type="tel" id="customerMobile" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary" placeholder="Enter mobile number" pattern="[0-9]{10}">
                         </div>
                         <div class="form-group">
-                            <label for="customerName" class="block text-sm font-medium text-gray-700 mb-1">Full Name
-                                *</label>
-                            <input type="text" id="customerName" name="customerName" required
-                                class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary"
-                                placeholder="Enter customer full name">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                            <input type="text" id="customerName" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary" placeholder="Enter customer name">
                         </div>
-                        <!-- NEW: Email Field -->
                         <div class="form-group">
-                            <label for="customerEmail" class="block text-sm font-medium text-gray-700 mb-1">Email
-                                Address (Optional)</label>
-                            <div class="flex gap-2">
-                                <input type="email" id="customerEmail" name="customerEmail"
-                                    class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary"
-                                    placeholder="Enter customer email for digital bill">
-                            </div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input type="email" id="customerEmail" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary" placeholder="Enter customer email">
                         </div>
                     </form>
                 </section>
 
-                <!-- 2. Medicine Search & Add Section -->
-                <section class="p-5 bg-white rounded-xl shadow-lg border border-gray-200">
+                <!-- Search Section (Always Visible) -->
+                <section id="searchSection" class="p-5 bg-white rounded-xl shadow-lg border border-gray-200 flex-grow">
                     <h2 class="text-lg font-semibold text-primary mb-4 flex items-center">
-                        <i class="fas fa-search mr-2 text-quarterly"></i> Search & Dispense Item
+                        <i class="fas fa-search mr-2 text-quarterly"></i> Search Medicine
                     </h2>
-
-
-
-                    <!-- Rest of the search section remains the same -->
-                    <div class="flex space-x-2 mb-3">
-                        <input type="text" id="medicineSearch"
-                            class="flex-grow p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary"
-                            placeholder="Search by drug name, code, or location...">
-                        <button id="scanBarcode"
-                            class="btn-secondary-custom py-3 px-4 rounded-lg font-semibold text-sm transition duration-200 flex items-center justify-center whitespace-nowrap">
-                            <i class="fas fa-barcode mr-1"></i> Scan
-                        </button>
+                    <div class="flex space-x-2 mb-3 relative">
+                        <input type="text" id="medicineSearch" class="flex-grow p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary text-lg" placeholder="Type medicine name..." autocomplete="off">
                     </div>
-
-                    <!-- Search Filters (Dropdown) -->
+                    
+                    <!-- Search Category -->
                     <div class="flex space-x-2 text-sm mb-4">
-                        <select id="searchCategory"
-                            class="p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary">
-                            <option value="all">Filter: All Fields</option>
+                        <select id="searchCategory" class="p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary">
+                            <option value="all">All Fields</option>
                             <option value="name">Name</option>
                             <option value="description">Description</option>
-                            <option value="location">Location</option>
-                            <option value="barcode">Barcode</option>
                         </select>
-                        <button id="clearSearch"
-                            class="text-primary hover:text-red-600 font-medium transition duration-150">
-                            <i class="fas fa-times mr-1"></i> Clear
+                        <!-- Manual Item Button -->
+                        <button id="addManualItem" class="text-primary hover:text-green-700 font-medium ml-auto flex items-center">
+                            <i class="fas fa-plus-circle mr-1"></i> Manual
                         </button>
                     </div>
 
-                    <!-- Manual Item Button -->
-                    <div class="mt-4">
-                        <button id="addManualItem"
-                            class="btn-outline-custom w-full py-2 rounded-lg font-semibold text-sm">
-                            <i class="fas fa-plus-circle mr-2"></i> Add Manual Item
-                        </button>
-                    </div>
-
-                    <!-- Search Results Dropdown Placeholder -->
-                    <div id="searchResultsDropdown"
-                        class="max-h-40 overflow-y-auto border border-gray-200 rounded-lg hidden">
-                        <!-- Dynamic search results will appear here -->
-                    </div>
+                    <!-- Dropdown Results -->
+                    <div id="searchResultsDropdown" class="max-h-60 overflow-y-auto border border-gray-200 rounded-lg hidden bg-white shadow-xl absolute z-50 w-full left-0"></div>
                 </section>
             </div>
 
-            <!-- RIGHT COLUMN (Selected Items, Summary & Actions - 3/5 width on desktop) -->
+            <!-- RIGHT: Cart & Summary -->
             <div class="lg:col-span-3 space-y-6">
-
-                <!-- 3. Selected Items Table (The Cart) -->
+                <!-- Cart Table -->
                 <section class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                    <h2 class="p-4 text-lg font-semibold text-primary border-b flex items-center">
-                        <i class="fas fa-cart-arrow-down mr-2 text-quarterly"></i> Selected Medicines (Bill Items)
+                    <h2 class="p-4 text-lg font-semibold text-primary border-b bg-gray-50 flex justify-between items-center">
+                        <span><i class="fas fa-shopping-cart mr-2 text-quarterly"></i> Cart</span>
+                        <span id="cartCountBadge" class="bg-primary text-white text-xs px-2 py-1 rounded-full hidden">0</span>
                     </h2>
-                    <div class="table-container max-h-[40vh] lg:max-h-[50vh] overflow-y-auto">
+                    <div class="max-h-[50vh] overflow-y-auto">
                         <table class="w-full text-sm text-left text-gray-600">
-                            <thead class="text-xs text-gray-800 uppercase bg-secondary/70 sticky top-0">
+                            <thead class="text-xs text-gray-800 uppercase bg-secondary/50 sticky top-0">
                                 <tr>
-                                    <th scope="col" class="py-2 px-3">Item Name</th>
-                                    <th scope="col" class="py-2 px-3 w-1/12 text-right">Unit Price</th>
-                                    <th scope="col" class="py-2 px-3 w-1/12 text-center">Qty</th>
-                                    <th scope="col" class="py-2 px-3 w-1/12 text-right">Total</th>
-                                    <th scope="col" class="py-2 px-3 w-1/12 text-center"></th>
+                                    <th class="py-3 px-4 w-1/2">Item</th>
+                                    <th class="py-3 px-2 text-center">Qty</th>
+                                    <th class="py-3 px-2 text-right">Price</th>
+                                    <th class="py-3 px-4 text-center">Total</th>
                                 </tr>
                             </thead>
                             <tbody id="selectedItemsTable">
-                                <!-- Dynamic rows will be inserted here -->
-                                <tr class="no-items-row">
-                                    <td colspan="5">
-                                        <div class="text-center py-8 text-gray-400">
-                                            <i class="fas fa-clipboard-list text-4xl mb-2"></i>
-                                            <p>No medicines added yet. Start searching above.</p>
-                                        </div>
-                                    </td>
-                                </tr>
+                                <tr class="no-items-row"><td colspan="5" class="text-center py-8 text-gray-400">Cart is empty</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </section>
 
-                <!-- 4. Bill Summary and Actions Container -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                    <!-- Bill Summary Section -->
-                    <section class="p-5 bg-white rounded-xl shadow-lg border border-gray-200">
-                        <h2 class="text-lg font-semibold text-primary mb-4">Financial Summary</h2>
-                        <div class="flex justify-between items-center text-sm text-gray-600 mb-2">
-                            <span>Bill Number:</span>
-                            <span id="billNumberDisplay" class="font-semibold">-</span>
-                        </div>
-                        <div class="space-y-3">
-                            <div class="flex justify-between items-center text-gray-700">
-                                <span class="text-sm">Subtotal:</span>
-                                <span class="font-medium" id="subtotalAmount">₹0.00</span>
-                            </div>
-
-                            <!-- Discount Row -->
-                            <div class="flex justify-between items-center pb-2 border-b">
-                                <span class="text-sm text-quarterly font-semibold">Discount:</span>
-                                <div class="flex space-x-2 items-center">
-                                    <input type="number" id="discountAmount" placeholder="0" min="0" step="0.01"
-                                        class="w-20 p-2 border border-gray-300 rounded-lg text-sm text-right focus:ring-primary focus:border-primary">
-                                    <select id="discountType"
-                                        class="p-2 border border-gray-300 rounded-lg text-sm focus:ring-primary focus:border-primary">
-                                        <option value="fixed">₹</option>
-                                        <option value="percentage">%</option>
-                                    </select>
+                <!-- Standard Footer (Hidden in Quick Mode by Default, toggled) -->
+                <div id="standardFooter" class="space-y-6 hidden transition-all duration-300">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <section class="p-5 bg-white rounded-xl shadow-lg border border-gray-200">
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center text-sm text-gray-600">
+                                    <span>Subtotal:</span>
+                                    <span id="subtotalAmount">₹0.00</span>
+                                </div>
+                                <div class="flex justify-between items-center text-sm text-gray-600">
+                                    <span>Discount:</span>
+                                    <div class="flex items-center space-x-2">
+                                        <input type="number" id="discountAmount" placeholder="0" class="w-16 p-1 border rounded text-right">
+                                        <select id="discountType" class="p-1 border rounded">
+                                            <option value="fixed">₹</option>
+                                            <option value="percentage">%</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center pt-2 text-xl font-bold text-primary border-t">
+                                    <span>Total:</span>
+                                    <span id="totalAmount">₹0.00</span>
                                 </div>
                             </div>
-
-                            <!-- Total Row -->
-                            <div class="flex justify-between items-center pt-3 text-2xl font-bold text-primary">
-                                <span class="uppercase">Net Total:</span>
-                                <span id="totalAmount">₹0.00</span>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Payment and Action Buttons -->
-                    <section class="p-5 bg-white rounded-xl shadow-lg border border-gray-200 space-y-4">
-                        <h2 class="text-lg font-semibold text-primary mb-4">Finalize Transaction</h2>
-
-                        <!-- Payment Methods -->
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-700 mb-2">Select Payment Method</h4>
-                            <div class="flex flex-wrap gap-2">
-                                <label
-                                    class="payment-option border border-primary text-primary hover:bg-secondary/50 rounded-lg cursor-pointer transition duration-150">
-                                    <input type="radio" name="paymentMethod" value="cash" checked class="hidden">
-                                    <span class="p-2 flex items-center text-sm"><i
-                                            class="fas fa-money-bill-wave mr-2"></i> Cash</span>
+                        </section>
+                        <section class="p-5 bg-white rounded-xl shadow-lg border border-gray-200 space-y-3">
+                            <div class="flex gap-2 mb-2">
+                                <label class="flex items-center space-x-2 cursor-pointer">
+                                    <input type="radio" name="paymentMethod" value="cash" checked class="accent-primary"> <span>Cash</span>
                                 </label>
-                                <label
-                                    class="payment-option border border-gray-300 hover:bg-gray-100 rounded-lg cursor-pointer transition duration-150">
-                                    <input type="radio" name="paymentMethod" value="card" class="hidden">
-                                    <span class="p-2 flex items-center text-sm"><i class="fas fa-credit-card mr-2"></i>
-                                        Card</span>
-                                </label>
-                                <label
-                                    class="payment-option border border-gray-300 hover:bg-gray-100 rounded-lg cursor-pointer transition duration-150">
-                                    <input type="radio" name="paymentMethod" value="upi" class="hidden">
-                                    <span class="p-2 flex items-center text-sm"><i class="fas fa-mobile-alt mr-2"></i>
-                                        UPI / QR</span>
-                                </label>
-                                <label
-                                    class="payment-option border border-gray-300 hover:bg-gray-100 rounded-lg cursor-pointer transition duration-150">
-                                    <input type="radio" name="paymentMethod" value="pay_later" class="hidden">
-                                    <span class="p-2 flex items-center text-sm"><i class="fas fa-clock mr-2"></i> Pay
-                                        Later</span>
+                                <label class="flex items-center space-x-2 cursor-pointer">
+                                    <input type="radio" name="paymentMethod" value="upi" class="accent-primary"> <span>UPI</span>
                                 </label>
                             </div>
-                        </div>
+                            <button id="saveBill" class="btn-primary-custom w-full py-3 rounded-lg font-bold" disabled>Finalize & Print</button>
+                            <button id="cancelEdit" class="hidden w-full py-2 text-gray-500 text-sm font-medium">Cancel Modification</button>
+                        </section>
+                    </div>
 
-                        <!-- UPI QR Code Container -->
-                        <div id="upiQrContainer"
-                            class="hidden flex flex-col items-center justify-center p-4 bg-gray-50 rounded-lg border border-gray-200 transition-all duration-300">
-                            <div id="qrcode" class="bg-white p-2 rounded shadow-sm mb-2"></div>
-                            <p class="text-sm font-semibold text-primary mt-2">Scan to Pay: <span
-                                    id="qrAmountDisplay">₹0.00</span></p>
-                            <p class="text-xs text-gray-500">UPI ID: Q623297548@ybl</p>
-                        </div>
-
-                        <!-- Main Action Buttons -->
-                        <div class="space-y-2">
-                            <button id="saveBill"
-                                class="btn-primary-custom w-full py-3 rounded-lg font-bold text-lg disabled:opacity-50"
-                                disabled>
-                                <i class="fas fa-save mr-2"></i> Finalize & Generate Bill
-                            </button>
-                            <div class="grid grid-cols-2 gap-2">
-                                <!-- CHANGED: WhatsApp to Email -->
-                                <button id="emailBill"
-                                    class="bg-blue-600 text-white py-2 rounded-lg font-semibold disabled:opacity-50 hover:bg-blue-700 transition duration-200"
-                                    disabled>
-                                    <i class="fas fa-envelope mr-1"></i> Email
-                                </button>
-                                <button id="printBill"
-                                    class="btn-secondary-custom py-2 rounded-lg font-semibold disabled:opacity-50"
-                                    disabled>
-                                    <i class="fas fa-print mr-1"></i> Print
-                                </button>
+                    <!-- Transaction History Panel -->
+                    <section class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                        <div class="p-4 bg-gray-50 border-b flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <h2 class="text-lg font-semibold text-primary"><i class="fas fa-history mr-2"></i> Recent Bills</h2>
+                            <div class="relative w-full sm:w-64">
+                                <input type="text" id="historySearch" placeholder="Search Bill # or Mobile" class="w-full p-2 pl-8 border rounded-lg text-sm">
+                                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
                             </div>
                         </div>
-
-                        <!-- Quick Actions -->
-                        <div class="flex justify-between pt-2 border-t border-gray-100">
-                            <div class="flex gap-2">
-                                <button id="newTransaction"
-                                    class="text-primary hover:text-primary/80 text-sm font-medium transition duration-150">
-                                    <i class="fas fa-plus mr-1"></i> Start New
-                                </button>
-                                <!-- NEW: Returns/Edit Button -->
-                                <button id="returnTransaction"
-                                    class="text-orange-600 hover:text-orange-700 text-sm font-medium transition duration-150">
-                                    <i class="fas fa-undo mr-1"></i> Returns / Edit Bill
-                                </button>
-                            </div>
-                            <button id="saveDraft"
-                                class="text-gray-500 hover:text-gray-700 text-sm font-medium transition duration-150">
-                                <i class="fas fa-file-alt mr-1"></i> Save Draft
-                            </button>
+                        <div class="max-h-64 overflow-y-auto">
+                            <table class="w-full text-xs text-left text-gray-600">
+                                <thead class="bg-gray-100 uppercase sticky top-0">
+                                    <tr>
+                                        <th class="py-3 px-4">Bill #</th>
+                                        <th class="py-3 px-4">Customer</th>
+                                        <th class="py-3 px-4 text-right">Amount</th>
+                                        <th class="py-3 px-4 text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody">
+                                    <tr><td colspan="4" class="text-center py-8 text-gray-400">Search to view history</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </section>
                 </div>
             </div>
-
         </main>
-
     </div>
 
-
-
-    <!-- NEW: Invoice Search Modal for Returns -->
-    <div id="invoiceSearchModal"
-        class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl h-[80vh] flex flex-col relative">
-            <div class="flex justify-between items-center mb-4 border-b pb-2">
-                <h3 class="text-xl font-bold text-primary">Find Invoice for Return/Edit</h3>
-                <button id="closeInvoiceSearchModal" class="text-gray-400 hover:text-gray-600">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
+    <!-- Quick Quantity Bottom Sheet -->
+    <div id="qtyOverlay" class="bottom-sheet-overlay"></div>
+    <div id="qtyBottomSheet" class="bottom-sheet">
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h3 id="qtyItemName" class="text-lg font-bold text-gray-800">Paracetamol 500mg</h3>
+                <p class="text-xs text-gray-500">Stock: <span id="qtyStockDisplay">100</span> | MRP: ₹<span id="qtyMrpDisplay">20</span></p>
             </div>
+            <button id="closeQtySheet" class="text-gray-400 p-2"><i class="fas fa-times text-xl"></i></button>
+        </div>
 
-            <!-- Search Bar -->
-            <div class="flex gap-2 mb-4">
-                <input type="text" id="invoiceSearchInput"
-                    class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
-                    placeholder="Enter Bill Number or Customer Mobile...">
-                <button id="searchInvoiceBtn"
-                    class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-green-700 transition">
-                    <i class="fas fa-search mr-2"></i> Search
-                </button>
-            </div>
+        <!-- Unit Toggle -->
+        <div class="flex bg-gray-100 p-1 rounded-lg mb-4">
+            <button id="unitStrip" class="flex-1 py-2 rounded-md text-sm font-semibold bg-white shadow text-primary transition">Strip/Pack</button>
+            <button id="unitLoose" class="flex-1 py-2 rounded-md text-sm font-semibold text-gray-500 transition">Loose (Tablets)</button>
+        </div>
 
-            <!-- Results List -->
-            <div class="flex-1 overflow-y-auto pr-2">
-                <table class="w-full text-sm text-left text-gray-600">
-                    <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0">
-                        <tr>
-                            <th class="px-3 py-2">Date</th>
-                            <th class="px-3 py-2">Bill No</th>
-                            <th class="px-3 py-2">Customer</th>
-                            <th class="px-3 py-2 text-right">Amount</th>
-                            <th class="px-3 py-2 text-center">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="invoiceResultsTable">
-                        <tr class="text-center text-gray-400">
-                            <td colspan="5" class="py-8">Search to see invoices...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+        <!-- Quantity Display -->
+        <div class="flex justify-center mb-4">
+            <span id="qtyInputDisplay" class="text-4xl font-bold text-primary">1</span>
+        </div>
+
+        <!-- Numpad -->
+        <div class="numpad-grid">
+            <button class="numpad-btn" data-val="1">1</button>
+            <button class="numpad-btn" data-val="2">2</button>
+            <button class="numpad-btn" data-val="3">3</button>
+            <button class="numpad-btn" data-val="4">4</button>
+            <button class="numpad-btn" data-val="5">5</button>
+            <button class="numpad-btn" data-val="6">6</button>
+            <button class="numpad-btn" data-val="7">7</button>
+            <button class="numpad-btn" data-val="8">8</button>
+            <button class="numpad-btn" data-val="9">9</button>
+            <button class="numpad-btn bg-red-100 text-red-600" id="numpadClear">C</button>
+            <button class="numpad-btn" data-val="0">0</button>
+            <button class="numpad-btn bg-green-100 text-green-700" id="numpadAdd"><i class="fas fa-check"></i></button>
         </div>
     </div>
 
-    <!-- JavaScript Files -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <!-- Quick Checkout FAB (Visible in Quick Mode) -->
+    <button id="fabCheckout" class="fab-checkout visible">
+        <span class="text-lg">₹<span id="fabTotal">0.00</span></span>
+        <i class="fas fa-check-circle text-3xl"></i>
+    </button>
+
+    <!-- Smart Success Flash -->
+    <div id="successFlash" class="success-bg-flash"></div>
+
+    <!-- Auto-disappearing Bill ID Popup -->
+    <div id="billIdPopup" class="hidden fixed inset-0 z-[200] flex items-center justify-center pointer-events-none">
+        <div class="popup-content bg-gray-900 text-white px-10 py-8 rounded-[40px] shadow-2xl flex flex-col items-center border border-primary/30">
+            <div class="checkmark-circle mb-4">
+                <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="80" height="80">
+                    <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" stroke="#00712D" stroke-width="2"/>
+                    <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" stroke="#D5ED9F" stroke-width="4" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <span class="text-xs font-bold text-primary uppercase tracking-[0.2em] mb-1">Success</span>
+            <h2 id="popupBillNo" class="text-4xl font-black text-white mb-2">#----</h2>
+            <p class="text-[10px] opacity-50 font-medium">TRANSACTION SAVED LOCALLY</p>
+        </div>
+    </div>
+
+    <!-- Gentle Info Popup -->
+    <div id="infoPopup" class="info-popup">
+        <div class="rate-label" id="infoLabel">Rate</div>
+        <div class="rate-value" id="infoValue">₹0.00</div>
+        <div class="item-type" id="infoType">Strip</div>
+    </div>
+
     <script src="/js/drugDispensing.js"></script>
-
     <script>
-        // Basic utility function for custom alerts (replacing alert())
-        function showModal(title, body) {
-            document.getElementById('modal-title').textContent = title;
-            document.getElementById('modal-body').textContent = body;
-            document.getElementById('message-modal').classList.remove('hidden');
-        }
-
-        // Ensure initial button state
         document.addEventListener('DOMContentLoaded', () => {
-            // Placeholder for user ID / Sign-in logic
-            document.getElementById('user-id').textContent = 'User ID: PHARM-1001';
+            document.getElementById('user-id').textContent = 'User: ADMIN'; // Placeholder
         });
     </script>
 </body>
-
 </html>

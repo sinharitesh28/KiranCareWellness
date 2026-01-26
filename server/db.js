@@ -174,7 +174,16 @@ setTimeout(() => {
         { table: 'import_stock_detail', column: 'barcode_printed', definition: 'BOOLEAN DEFAULT FALSE' },
 
         // ADD THIS: Add packing_col to importTemplate table
-        { table: 'importTemplate', column: 'packing_col', definition: 'VARCHAR(255)' }
+        { table: 'importTemplate', column: 'packing_col', definition: 'VARCHAR(255)' },
+
+        // Add gmail_thread_id to distributor_email_config
+        { table: 'distributor_email_config', column: 'gmail_thread_id', definition: 'VARCHAR(255) NULL' },
+
+        // Add Smart Invoice Extraction columns to distributor_email_config
+        { table: 'distributor_email_config', column: 'invoice_no_regex', definition: 'VARCHAR(500) NULL' },
+        { table: 'distributor_email_config', column: 'invoice_date_regex', definition: 'VARCHAR(500) NULL' },
+        { table: 'distributor_email_config', column: 'invoice_no_source', definition: "ENUM('subject', 'body') NULL" },
+        { table: 'distributor_email_config', column: 'invoice_date_source', definition: "ENUM('subject', 'body') NULL" }
     ];
 
     // Process column additions sequentially

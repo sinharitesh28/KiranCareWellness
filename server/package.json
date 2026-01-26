@@ -2,10 +2,14 @@
   "dependencies": {
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "dayjs": "^1.11.19",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-mysql-session": "^3.0.3",
     "express-session": "^1.18.2",
+    "imap-simple": "^5.1.0",
+    "mailparser": "^3.9.1",
     "multer": "^2.0.2",
     "mysql2": "^3.15.2",
     "node-cron": "^4.2.1",
@@ -13,12 +17,14 @@
     "pdfkit": "^0.17.2",
     "python-shell": "^5.0.0",
     "qrcode": "^1.5.4",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "xlsx": "^0.18.5"
   },
   "name": "server",
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
+    "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

@@ -16,11 +16,23 @@ services:
       # Telegram Bot
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       
+      # Mail Configuration
+      - MAIL_USER=${MAIL_USER}
+      - MAIL_PASS=${MAIL_PASS}
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      
       # Timezone
       - TZ=Asia/Kolkata
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Mount source code for live updates (optional/dev)
-      # - .:/usr/src/app
+      - .:/usr/src/app
       # Mount uploads directory to persist data
       - ./server/uploads:/usr/src/app/server/uploads
+      # Anonymous volume for node_modules to use image version instead of host version
+      - /usr/src/app/server/node_modules
     restart: always

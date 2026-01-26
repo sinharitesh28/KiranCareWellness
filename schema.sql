@@ -162,4 +162,21 @@ CREATE TABLE IF NOT EXISTS `reminders` (
     FOREIGN KEY (`transaction_item_id`) REFERENCES `transaction_items`(`id`) ON DELETE CASCADE
 );
 
+-- 10. Distributor Email Config Table (NEW)
+CREATE TABLE IF NOT EXISTS `distributor_email_config` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `distributor_name` VARCHAR(255) NOT NULL,
+    `email_sender` VARCHAR(255) NOT NULL,
+    `subject_match_type` ENUM('starts_with', 'contains', 'ends_with') DEFAULT 'contains',
+    `subject_keyword` VARCHAR(255),
+    `file_type_preference` ENUM('csv', 'xlsx', 'both') DEFAULT 'both',
+    `invoice_no_regex` VARCHAR(500) NULL,
+    `invoice_date_regex` VARCHAR(500) NULL,
+    `invoice_no_source` ENUM('subject', 'body') NULL,
+    `invoice_date_source` ENUM('subject', 'body') NULL,
+    `template_id` INT,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`template_id`) REFERENCES `importTemplate`(`id`) ON DELETE SET NULL
+);
+
 SET FOREIGN_KEY_CHECKS = 1;

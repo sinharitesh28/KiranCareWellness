@@ -1,4 +1,4 @@
-        .btn-primary-custom {
+.btn-primary-custom {
             background-color: #00712D;
             color: white;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
@@ -116,4 +116,224 @@
     background-color: #00712D;
     color: white;
     transform: translateY(-1px);
+}
+
+/* --- Mobile / Quick Mode Styles --- */
+
+/* Bottom Sheet */
+.bottom-sheet {
+    position: fixed;
+    bottom: -100%;
+    left: 0;
+    right: 0;
+    background: white;
+    z-index: 100;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+    transition: bottom 0.3s ease-out;
+    padding: 20px;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+.bottom-sheet.active {
+    bottom: 0;
+}
+
+.bottom-sheet-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease-out;
+}
+
+.bottom-sheet-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Custom Numpad */
+.numpad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.numpad-btn {
+    padding: 15px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    color: #1f2937;
+    touch-action: manipulation;
+}
+
+.numpad-btn:active {
+    background: #e5e7eb;
+    transform: scale(0.98);
+}
+
+/* Floating Action Button (FAB) */
+.fab-checkout {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    left: 20px;
+    background: #00712D;
+    color: white;
+    padding: 16px;
+    border-radius: 16px;
+    box-shadow: 0 4px 15px rgba(0,113,45,0.4);
+    z-index: 90;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    transform: translateY(150%); /* Hidden by default */
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.fab-checkout.visible {
+    transform: translateY(0);
+}
+
+/* Smart Transaction Animations */
+@keyframes success-ripple {
+    0% { transform: scale(0.8); opacity: 0; }
+    50% { opacity: 0.5; }
+    100% { transform: scale(1.5); opacity: 0; }
+}
+
+.success-bg-flash {
+    position: fixed;
+    inset: 0;
+    background: #00712D;
+    z-index: 150;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.success-bg-flash.active {
+    animation: success-ripple 0.8s ease-out forwards;
+}
+
+/* Professional Bill ID Popup */
+#billIdPopup .popup-content {
+    background: linear-gradient(145deg, #1a202c, #2d3748);
+    border: 2px solid #00712D;
+    transform: translateY(20px);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#billIdPopup.active .popup-content {
+    transform: translateY(0);
+}
+
+.checkmark-circle {
+    width: 80px;
+    height: 80px;
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+}
+
+.checkmark-circle .checkmark {
+    border-radius: 50%;
+    display: block;
+    stroke-width: 4;
+    stroke: #D5ED9F;
+    stroke-miterlimit: 10;
+    box-shadow: inset 0px 0px 0px #00712D;
+    animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
+}
+
+@keyframes fill {
+    100% { box-shadow: inset 0px 0px 0px 40px #00712D; }
+}
+
+/* Quick Mode Toggle Switch */
+.toggle-checkbox:checked {
+    right: 0;
+    border-color: #00712D;
+}
+.toggle-checkbox:checked + .toggle-label {
+    background-color: #00712D;
+}
+
+/* Mobile Friendly Table */
+#selectedItemsTable input:focus {
+    outline: none;
+    border-color: #00712D;
+    box-shadow: 0 0 0 2px rgba(0, 113, 45, 0.1);
+}
+
+@media (max-width: 640px) {
+    table {
+        table-layout: fixed;
+    }
+    td, th {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+}
+
+/* Professional Info Popup */
+.info-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background: rgba(17, 24, 39, 0.98);
+    color: white;
+    padding: 20px 32px;
+    border-radius: 24px;
+    box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    text-align: center;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 240px;
+}
+
+.info-popup.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    pointer-events: auto;
+}
+
+.info-popup .rate-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+    margin-bottom: 2px;
+}
+
+.info-popup .rate-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #D5ED9F;
+}
+
+.info-popup .item-type {
+    font-size: 0.85rem;
+    margin-top: 4px;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 8px;
+    border-radius: 99px;
+    display: inline-block;
 }

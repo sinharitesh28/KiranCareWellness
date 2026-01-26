@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Format last orders
             const lastOrdersHtml = customer.last_orders && customer.last_orders.length > 0 
                 ? customer.last_orders.map(order => {
-                    const date = new Date(order.transaction_date).toLocaleDateString();
+                    const date = dayjs(order.transaction_date).format('DD/MM/YY');
                     return `<div class="text-xs text-gray-500">
                         <span class="font-medium text-gray-700">#${order.bill_number}</span> 
                         - ${date} 
@@ -59,7 +59,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 : '<span class="text-gray-400 italic">No recent orders</span>';
 
             const contactInfo = `
-                <div class="font-medium text-gray-900">${customer.mobile_no || '-'}</div>
+                <div class="flex items-center gap-2">
+                    <div class="font-medium text-gray-900">${customer.mobile_no || '-'}</div>
+                    ${customer.mobile_no ? `
+                        <a href="https://wa.me/91${customer.mobile_no.replace(/[^0-9]/g, '')}" target="_blank" class="text-green-500 hover:text-green-700 transition" title="Message on WhatsApp">
+                            <i class="fab fa-whatsapp"></i>
+                        </a>
+                    ` : ''}
+                </div>
                 ${customer.email ? `<div class="text-xs text-gray-500">${customer.email}</div>` : ''}
             `;
 

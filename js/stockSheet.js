@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Filter Data
         const searchTerm = searchInput.value.toLowerCase();
         const hideExpired = hideExpiredCheckbox.checked;
-        const today = new Date().toISOString().split('T')[0];
+        const today = dayjs().startOf('day');
 
         let filteredData = data.filter(item => {
             const matchesSearch = 
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 (item.batch_number && item.batch_number.toLowerCase().includes(searchTerm)) ||
                 (item.vendor_name && item.vendor_name.toLowerCase().includes(searchTerm));
             
-            const isExpired = item.expiry_date && item.expiry_date !== 'N/A' && item.expiry_date < today;
+            const isExpired = item.expiry_date && item.expiry_date !== 'N/A' && dayjs(item.expiry_date).isBefore(today);
             const passesExpiryCheck = !hideExpired || !isExpired;
 
             return matchesSearch && passesExpiryCheck;

@@ -29,7 +29,7 @@ router.post('/send-otp', async (req, res) => {
         );
 
         if (!results || results.length === 0) {
-            return res.status(404).json({ error: 'Invalid employee code' });
+            return res.status(400).json({ error: 'Invalid employee code' });
         }
 
         const user = results[0];
@@ -50,25 +50,42 @@ router.post('/send-otp', async (req, res) => {
             text: `Your OTP for Kiran Care Wellness login is: ${otp}. It will expire in 5 minutes.`
         };
 
-        // Send Email
-        await transporter.sendMail(mailOptions);
-        let message = 'OTP sent to official email id';
+        let message = '';
+        let emailSuccess = false;
 
-        // Send via Telegram if linked
+        // Try Sending Email
+        try {
+            await transporter.sendMail(mailOptions);
+            message = 'OTP sent to official email id';
+            emailSuccess = true;
+        } catch (emailErr) {
+            console.error('Failed to send email OTP:', emailErr.message);
+            // Continue to try Telegram
+        }
+
+        // Try Sending via Telegram if linked
         if (user.telegram_chat_id && bot) {
             try {
                 await bot.telegram.sendMessage(user.telegram_chat_id, `🔐 *Login OTP*\n\nYour OTP is: *${otp}*\n\nValid for 5 minutes.`, { parse_mode: 'Markdown' });
-                message += ' and Telegram Bot';
+                if (emailSuccess) {
+                    message += ' and Telegram Bot';
+                } else {
+                    message = 'OTP sent via Telegram Bot (Email failed)';
+                }
             } catch (teleErr) {
                 console.error('Failed to send Telegram OTP:', teleErr.message);
-                // Don't fail the request, just log it
             }
+        }
+
+        // If both failed (or email failed and no telegram), report error
+        if (!emailSuccess && (!user.telegram_chat_id || !bot)) {
+             return res.status(500).json({ error: 'Failed to send OTP via Email. Telegram not configured.' });
         }
 
         res.json({ message });
     } catch (err) {
         console.error('send-otp error:', err);
-        res.status(500).json({ error: 'Failed to send OTP' });
+        res.status(500).json({ error: 'Failed to send OTP: ' + err.message });
     }
 });
 
@@ -138,6 +155,36 @@ router.get('/user-data', requireAuth, async (req, res) => {
         console.error('Database query error fetching user data:', err);
         // Send a generic error response, but log the specific error
         res.status(500).json({ error: 'Internal server error while fetching user data.' });
+    }
+});
+
+/**
+ * @route GET /auth/user-info
+ * @description Protected route to fetch the logged-in user's info for UI display.
+ */
+router.get('/user-info', requireAuth, async (req, res) => {
+    const employeeCode = req.session.code;
+    try {
+        const [results] = await db.promise().query(
+            'SELECT name, position as role FROM employeedetails WHERE code = ?',
+            [employeeCode]
+        );
+
+        if (results.length > 0) {
+            res.json({ 
+                success: true,
+                user: {
+                    employeeCode: employeeCode,
+                    name: results[0].name,
+                    role: results[0].role || 'Staff'
+                }
+            });
+        } else {
+            res.status(404).json({ success: false, error: 'User not found' });
+        }
+    } catch (err) {
+        console.error('user-info error:', err);
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });
 
